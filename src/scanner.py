@@ -57,7 +57,7 @@ KEYWORDS = {'void' : 'T_Void',
 
 REGEX_DELIM = '\s+'
 REGEX_MLINE_COMMENT = '/\*(.|\s)*?((\*/)|$)' # non-standard regex, could not solve it any other way
-REGEX_SLINE_COMMENT = '//[^\n]*\n'
+REGEX_SLINE_COMMENT = '//[^\n]*(\n|$)'
 REGEX_IGNORE = '|'.join([REGEX_DELIM, REGEX_MLINE_COMMENT, REGEX_SLINE_COMMENT])
 REGEX_BADSTRING = '"[^"\n]*(\n|$)'
 
