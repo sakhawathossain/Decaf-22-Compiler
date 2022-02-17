@@ -12,17 +12,19 @@ import re
 REGEX_TOKENS = [
         ('T_DoubleConstant', '[0-9]+\.[0-9]*((E[+]?[0-9]+)|(E-[0-9]+))?'),
         ('T_Identifier', '[a-zA-Z]+[a-zA-Z0-9_]*'),
-        ('T_IntConstant', '[0-9]+'),
+        ('T_IntConstant', '(((0X)|(0x))[0-9a-fA-F]+)|([0-9]+)'),
         ('T_StringConstant', '"[^\n"]*"'),
         ('T_Or', '\|\|'),
         ('T_And', '&&'),
         ('T_LessEqual', '<='),
         ('T_GreaterEqual', '>='),
         ('T_Equal', '=='),
+        ('T_NotEqual', '!='),
         ('+', '\+'),
         ('-', '\-'),
         ('*', '\*'),
         ('/', '/'),
+        ('%', '%'),
         ('<', '<'),
         ('>', '>'),
         ('=', '='),
@@ -39,19 +41,25 @@ KEYWORDS = {'void' : 'T_Void',
             'int': 'T_Int',
             'double': 'T_Double',
             'string': 'T_String',
+            'null': 'T_Null',
+            'for': 'T_For',
             'while': 'T_While',
             'if': 'T_If',
             'else': 'T_Else',
             'return': 'T_Return',
             'break': 'T_Break',
+            'bool': 'T_Bool',            
             'true': 'T_BoolConstant',
-            'false': 'T_BoolConstant'}
+            'false': 'T_BoolConstant',
+            'Print': 'T_Print',
+            'ReadInteger': 'T_ReadInteger',
+            'ReadLine': 'T_ReadLine'}
 
 REGEX_DELIM = '\s+'
-REGEX_MLINE_COMMENT = '/\*(.|\s)*?((\*/)|$)'
+REGEX_MLINE_COMMENT = '/\*(.|\s)*?((\*/)|$)' # non-standard regex, could not solve it any other way
 REGEX_SLINE_COMMENT = '//[^\n]*\n'
 REGEX_IGNORE = '|'.join([REGEX_DELIM, REGEX_MLINE_COMMENT, REGEX_SLINE_COMMENT])
-REGEX_BADSTRING = '"[^"\n]*\n'
+REGEX_BADSTRING = '"[^"\n]*(\n|$)'
 
 class Scanner:
     """Regex-based scanner for Decaf-22"""
@@ -60,13 +68,20 @@ class Scanner:
         self.verbose = verbose
     
     def get_val(self, token_type, lexeme):
-        """Return the string value as well as correctly typed value for given lexeme and type"""
+        """Return the printable value as well as correctly Python-typed value for given lexeme and type"""
+        """Printable and correctly Python-typed values are not always the same, e.g. 'true' vs 'True' """
         
         if token_type == 'T_BoolConstant':
             return lexeme, lexeme == 'true'
         elif token_type == 'T_StringConstant':
-            return lexeme, lexeme[1:-1]
-        elif token_type in ['T_IntConstant', 'T_DoubleConstant']:
+            return lexeme, lexeme[1:-1] # remove double-quotes from the value
+        elif token_type == 'T_IntConstant':
+            if lexeme.lower().startswith('0x'): # hexadecimal integer
+                val = int(lexeme[2:], 16)
+            else:
+                val = int(lexeme)
+            return val, val
+        elif token_type == 'T_DoubleConstant':
             val = float(lexeme)
             if val - int(val) == 0:
                 val = int(val)
@@ -91,7 +106,7 @@ class Scanner:
     def scan(self, txt):
         """Scan string and return a list of tokens"""
         
-        tokens = []
+        tokens = [] # will contain token information for downstream processing
         line, col = 1, 1
         while txt != '':
             if re.match(REGEX_IGNORE, txt):
@@ -102,7 +117,7 @@ class Scanner:
                 txt = txt[len(lexeme):]
             elif re.match(REGEX_BADSTRING, txt): 
                 lexeme = re.match(REGEX_BADSTRING, txt).group(0)
-                self.print_error('Unterminated string constant: {0}'.format(lexeme[:-1]), line)
+                self.print_error('Unterminated string constant: {0}'.format(lexeme.replace('\n', '')), line)
                 line += 1
                 col = 1
                 txt = txt[len(lexeme):]  
@@ -115,7 +130,7 @@ class Scanner:
                         val, strval, msg = None, None, None
                         txt = txt[len(lexeme):]
                         if token_type == 'T_Identifier':
-                            if lexeme in KEYWORDS: # If Identifier matches keyword table entry, update token type
+                            if lexeme in KEYWORDS: # If lexeme matches keyword table entry, update token type
                                 token_type = KEYWORDS[lexeme]
                                 if token_type == 'T_BoolConstant': # Set BoolConstant value to True or False
                                     strval, val = self.get_val(token_type, lexeme)
