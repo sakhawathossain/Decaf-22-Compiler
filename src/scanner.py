@@ -10,7 +10,7 @@ import sys
 import re
 
 REGEX_TOKENS = [
-        ('T_DoubleConstant', '[0-9]+\.[0-9]*((E[+]?[0-9]+)|(E-[0-9]+))?'),
+        ('T_DoubleConstant', '[0-9]+\.[0-9]*(((E|e)[+]?[0-9]+)|((E|e)-[0-9]+))?'),
         ('T_Identifier', '[a-zA-Z]+[a-zA-Z0-9_]*'),
         ('T_IntConstant', '(((0X)|(0x))[0-9a-fA-F]+)|([0-9]+)'),
         ('T_StringConstant', '"[^\n"]*"'),
