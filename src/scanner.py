@@ -103,32 +103,32 @@ class Scanner:
     def print_error(self, msg, line):
         print('\n*** Error line {0}.\n*** {1}\n'.format(line, msg))
 
-    def scan(self, txt):
+    def scan(self, text):
         """Scan string and return a list of tokens"""
         
         tokens = [] # will contain token information for downstream processing
         line, col = 1, 1
-        while txt != '':
-            if re.match(REGEX_IGNORE, txt):
-                lexeme = re.match(REGEX_IGNORE, txt).group(0)
+        while text != '':
+            if re.match(REGEX_IGNORE, text):
+                lexeme = re.match(REGEX_IGNORE, text).group(0)
                 n_lines = lexeme.count('\n')
                 line += n_lines
                 col = col + len(lexeme) if n_lines == 0 else len(lexeme.split('\n')[-1])+1
-                txt = txt[len(lexeme):]
-            elif re.match(REGEX_BADSTRING, txt): 
-                lexeme = re.match(REGEX_BADSTRING, txt).group(0)
+                text = text[len(lexeme):]
+            elif re.match(REGEX_BADSTRING, text): 
+                lexeme = re.match(REGEX_BADSTRING, text).group(0)
                 self.print_error('Unterminated string constant: {0}'.format(lexeme.replace('\n', '')), line)
                 line += 1
                 col = 1
-                txt = txt[len(lexeme):]  
+                text = text[len(lexeme):]  
             else:
                 for token_type, REGEX_TOKEN in REGEX_TOKENS:
-                    if re.match(REGEX_TOKEN, txt):
-                        lexeme = re.match(REGEX_TOKEN, txt).group(0)
+                    if re.match(REGEX_TOKEN, text):
+                        lexeme = re.match(REGEX_TOKEN, text).group(0)
                         start, end = col, col + len(lexeme)-1
                         col = end + 1
                         val, strval, msg = None, None, None
-                        txt = txt[len(lexeme):]
+                        text = text[len(lexeme):]
                         if token_type == 'T_Identifier':
                             if lexeme in KEYWORDS: # If lexeme matches keyword table entry, update token type
                                 token_type = KEYWORDS[lexeme]
@@ -149,9 +149,9 @@ class Scanner:
                         tokens.append([token_type, lexeme, val, line, start, end]) # append token to token stream
                         break # no need to check the other regular expressions after a match
                 else: # No pattern matches, read a single symbol and print error message
-                    lexeme = txt[0]
+                    lexeme = text[0]
                     self.print_error("Unrecognized char: '{0}'".format(lexeme), line)
-                    txt = txt[1:]
+                    text = text[1:]
         return tokens 
 
 
