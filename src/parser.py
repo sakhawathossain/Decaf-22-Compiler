@@ -42,14 +42,21 @@ class Parser:
     class Program(ASTNode):
         def __init__(self):
             self.decls = []
+        def print_tree(self):
+            print('   Program:')
+            for decl in self.decls:
+                decl.print_tree(indent = 1)
             
     class Decl(ASTNode):
-        def __init__(self):
-            pass
-        
+        pass
+            
     class VariableDecl(Decl):
         def __init__(self):
             pass
+        def print_tree(self, indent = 0):
+            print('{:>3}{:}VarDecl:'.format(self.line, ' '*3*indent))
+            self.type_.print_tree(indent+1)
+            print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(indent+1), self.ident.lexeme))
         
     class Variable(ASTNode):
         def __init__(self):
@@ -61,6 +68,8 @@ class Parser:
         
     class Type():
         pass
+        def print_tree(self, indent = 0):
+            print('   {:}Type: {:}'.format(' '*3*indent, self.typeval))
         
     
     
@@ -76,23 +85,20 @@ class Parser:
         if self.get_next_token() == None:
             return None
         type_ = self.get_type()
-        ident = self.accept_token('T_Identifier').lexeme
+        ident = self.accept_token('T_Identifier')
         token = self.get_next_token()
-        print('so far so good')
-        print(str(type_))
-        print(str(ident))
-        print(str(token))
-        print()
         if token.istype(';') and type_.typeval != 'T_Void':
             decl = self.VariableDecl()
             decl.type_ = type_
             decl.ident = ident
+            decl.line = type_.line
             self.accept_token(';')
             return decl
         elif token.istype('('):
             decl = self.FunctionDecl()
             decl.type_ = type_
             decl.ident = ident
+            decl.line = type_.line
             self.accept_token('(')
             decl.formals = self.get_formals()
             self.accept_token(')')
@@ -106,7 +112,8 @@ class Parser:
         if token.name not in ['T_Int', 'T_Double', 'T_Bool', 'T_String', 'T_Void']:
             raise self.ParseError
         type_ = self.Type()
-        type_.typeval = token.name
+        type_.typeval = token.lexeme
+        type_.line = token.line
         self.accept_token()
         return type_
 
@@ -149,6 +156,7 @@ class Parser:
         except self.ParseError:
             self.print_error(self.get_next_token())
             return
+        program.print_tree()
         # convert to objects for better readability
         
         
