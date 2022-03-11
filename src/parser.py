@@ -19,6 +19,9 @@ class Parser:
             self.line = line
             self.start = start
             self.end = end
+        def istype(self, name):
+            return name == self.name
+        
         def __str__(self):
             return \
                 'Token\n' + \
@@ -29,18 +32,129 @@ class Parser:
                 'line:   {0}\n'.format(self.line) + \
                 'start:  {0}\n'.format(self.start) + \
                 'end:    {0}\n'.format(self.end)
-                    
+    
+    class ParseError(Exception):
+        pass
+                
+    class ASTNode:
+        pass
+    
+    class Program(ASTNode):
+        def __init__(self):
+            self.decls = []
+            
+    class Decl(ASTNode):
+        def __init__(self):
+            pass
+        
+    class VariableDecl(Decl):
+        def __init__(self):
+            pass
+        
+    class Variable(ASTNode):
+        def __init__(self):
+            pass
+        
+    class FunctionDecl(Decl):
+        def __init__(self):
+            pass
+        
+    class Type():
+        pass
+        
+    
+    
+    def get_program(self):
+        program = self.Program()
+        decl = self.get_decl()
+        while decl != None:
+            program.decls.append(decl)
+            decl = self.get_decl()        
+        return program
+    
+    def get_decl(self):
+        if self.get_next_token() == None:
+            return None
+        type_ = self.get_type()
+        ident = self.accept_token('T_Identifier').lexeme
+        token = self.get_next_token()
+        print('so far so good')
+        print(str(type_))
+        print(str(ident))
+        print(str(token))
+        print()
+        if token.istype(';') and type_.typeval != 'T_Void':
+            decl = self.VariableDecl()
+            decl.type_ = type_
+            decl.ident = ident
+            self.accept_token(';')
+            return decl
+        elif token.istype('('):
+            decl = self.FunctionDecl()
+            decl.type_ = type_
+            decl.ident = ident
+            self.accept_token('(')
+            decl.formals = self.get_formals()
+            self.accept_token(')')
+            decl.stmtblock = self.get_stmtblock()
+            return decl
+        else:
+            raise self.ParseError
+            
+    def get_type(self):
+        token = self.get_next_token()
+        if token.name not in ['T_Int', 'T_Double', 'T_Bool', 'T_String', 'T_Void']:
+            raise self.ParseError
+        type_ = self.Type()
+        type_.typeval = token.name
+        self.accept_token()
+        return type_
+
+    def get_formals(self):
+        return None
+    
+    def get_stmtblock(self):
+        return None
+    
+    def get_next_token(self):
+        if self.pos >= len(self.tokenlist):
+            return None
+        return self.tokenlist[self.pos]
+        
+    def accept_token(self, name = None):
+        token = self.get_next_token()
+        if name != None:
+            if not token.istype(name):
+                raise self.ParseError
+        self.pos += 1
+        return token
+        
+    
+    def print_error(self, token):
+        line, start, end = token.line-1, token.start-1, token.end-1
+        print('print_error', line, start, end)
+        print(self.textlines[line])
+        print(' '* start + '^' * (end - start + 1))
             
     def __init__(self, text):
         self.text = text
         self.textlines = text.split('\n')
+        tokenlist = Scanner().scan(self.text)
+        self.tokenlist = [self.Token(*item) for item in tokenlist]
+        self.pos = 0
         
     def parse(self):
-        tokenlist = Scanner().scan(self.text)
+        try:
+            program = self.get_program()
+        except self.ParseError:
+            self.print_error(self.get_next_token())
+            return
         # convert to objects for better readability
-        tokenlist = [self.Token(*item) for item in tokenlist]
-        for token in tokenlist:
-            print(str(token))
+        
+        
+        # for token in tokenlist:
+        #     print(str(token))
+        
             
             
     
