@@ -43,51 +43,84 @@ class Program(ASTNode):
     def print_tree(self):
         print('   Program:')
         for decl in self.decls:
-            decl.print_tree(indent = 1)
+            decl.print_tree(tablevel = 1)
         
 class Decl(ASTNode):
     pass
         
 class VariableDecl(Decl):
-    def print_tree(self, indent = 0, prefix = None):
-        prefix = prefix + ' ' if prefix != None else ''
-        print('{:>3}{:}{:}VarDecl:'.format(self.line, ' '*3*indent, prefix))
-        self.type_.print_tree(indent+1)
-        print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(indent+1), self.ident.lexeme))
+    def __init__(self, variable = None):
+        if variable:
+            # collapse the intermediate node "variable" on the fly
+            self.type_ = variable.type_
+            self.ident = variable.ident
+            
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}VarDecl:'.format(self.type_.line, ' '*3*tablevel, prefix))
+        self.type_.print_tree(tablevel+1)
+        print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(tablevel+1), self.ident.lexeme))
+
+class Variable():
+    pass
     
 class FunctionDecl(Decl):
-    def __init__(self):
-        pass
-    def print_tree(self, indent = 0):
-        print('{:>3}{:}FnDecl:'.format(self.line, ' '*3*indent))
-        self.type_.print_tree(indent+1, '(return type)')
-        print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(indent+1), self.ident.lexeme))
+    def print_tree(self, tablevel = 0):
+        print('{:>3}{:}FnDecl:'.format(self.type_.line, ' '*3*tablevel))
+        self.type_.print_tree(tablevel+1, '(return type) ')
+        print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(tablevel+1), self.ident.lexeme))
         for vardecl in self.formals:
-            vardecl.print_tree(indent +1, '(formals)')
+            vardecl.print_tree(tablevel + 1, '(formals) ')
+        self.stmtblock.print_tree(tablevel + 1, '(body) ')
             
 class StmtBlock(ASTNode):
     def __init__(self):
         self.vardecls = []
         self.stmts = []
+        
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}StmtBlock:'.format(' '*3*tablevel, prefix))
+        for vardecl in self.vardecls:
+            vardecl.print_tree(tablevel+1)
+        # TODO: print stmts
+
+class Stmt(ASTNode):
+    pass
+
+
     
 class Type(ASTNode):
-    pass
-    def print_tree(self, indent = 0, prefix = None):
+    def print_tree(self, tablevel = 0, prefix = None):
         prefix = prefix + ' ' if prefix != None else ''
-        print('   {:}{:}Type: {:}'.format(' '*3*indent, prefix, self.typeval))
+        print('   {:}{:}Type: {:}'.format(' '*3*tablevel, prefix, self.typeval))
 
 class Parser:
+    
+    def __init__(self, text):
+        self.text = text
+        self.textlines = text.split('\n')
+        tokenlist = Scanner().scan(self.text)
+        self.tokenlist = [Token(*item) for item in tokenlist]
+        self.pos = 0
+        return
+        
+    def parse(self):
+        try:
+            program = self.get_program()
+        except ParseError:
+            self.print_error(self.get_next_token())
+            return
+        program.print_tree()
+        return
+        
     def get_program(self):
         program = Program()
-        decl = self.get_decl()
-        while decl != None:
+        program.decls.append(self.get_decl())
+        while self.get_next_token():
+            decl = self.get_decl()  
             program.decls.append(decl)
-            decl = self.get_decl()        
         return program
     
     def get_decl(self):
-        if self.get_next_token() == None:
-            return None
         type_ = self.get_type()
         ident = self.consume_token('T_Identifier')
         token = self.get_next_token()
@@ -111,9 +144,11 @@ class Parser:
         else:
             raise ParseError
             
-    def get_type(self):
+    def get_type(self, allow_void = True):
         token = self.get_next_token()
         if token.name not in ['T_Int', 'T_Double', 'T_Bool', 'T_String', 'T_Void']:
+            raise ParseError
+        if token.istype('T_Void') and not allow_void:
             raise ParseError
         type_ = Type()
         type_.typeval = token.lexeme
@@ -125,22 +160,36 @@ class Parser:
         token = self.get_next_token()
         if token.istype(')'):
             return []
-        vardecl = VariableDecl()
-        vardecl.type_ = self.get_type()
-        vardecl.line = vardecl.type_.line
-        vardecl.ident = self.consume_token('T_Identifier')
-        formals = [vardecl]
+        formals = [VariableDecl(self.get_variable())]
         if self.get_next_token().istype(','):
             self.consume_token()
             formals.extend(self.get_formals())
         return formals
-            
+    
+    def get_variable(self):
+        type_ = self.get_type(allow_void = False)
+        ident = self.consume_token('T_Identifier')
+        variable = Variable()
+        variable.type_ = type_
+        variable.ident = ident
+        variable.line = type_.line
+        return variable
     
     def get_stmtblock(self):
         self.consume_token('{')
-        print('ok')
+        # consume variableDecls
+        stmtBlock = StmtBlock()
+        token = self.get_next_token()
+        while token.name in ['T_Int', 'T_Double', 'T_Bool', 'T_String']:
+            stmtBlock.vardecls.append(VariableDecl(self.get_variable()))
+            self.consume_token(';')
+            token = self.get_next_token()
+        # consume Stmts
         self.consume_token('}')
-        return None
+        return stmtBlock
+    
+    def get_stmt():
+        pass
     
     def get_next_token(self):
         if self.pos >= len(self.tokenlist):
@@ -166,25 +215,10 @@ class Parser:
         print(' '* start + '^' * (end - start + 1))
         print('*** syntax error')
             
-    def __init__(self, text):
-        self.text = text
-        self.textlines = text.split('\n')
-        tokenlist = Scanner().scan(self.text)
-        self.tokenlist = [Token(*item) for item in tokenlist]
-        self.pos = 0
+
         
-    def parse(self):
-        try:
-            program = self.get_program()
-        except ParseError:
-            self.print_error(self.get_next_token())
-            return
-        program.print_tree()
-        # convert to objects for better readability
-        
-        
-        # for token in tokenlist:
-        #     print(str(token))
+
+
         
             
             
