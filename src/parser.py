@@ -86,6 +86,24 @@ class StmtBlock(ASTNode):
 class Stmt(ASTNode):
     pass
 
+class IfStmt(Stmt):
+    pass
+
+class WhileStmt(Stmt):
+    pass
+
+class ForStmt(Stmt):
+    pass
+
+class BreakStmt(Stmt):
+    pass
+
+class ReturnStmt(Stmt):
+    pass
+
+class PrintStmt(Stmt):
+    pass
+
 
     
 class Type(ASTNode):
@@ -124,7 +142,7 @@ class Parser:
         type_ = self.get_type()
         ident = self.consume_token('T_Identifier')
         token = self.get_next_token()
-        if token.istype(';') and type_.typeval != 'T_Void':
+        if token.istype(';') and type_.typeval != 'void':
             decl = VariableDecl()
             decl.type_ = type_
             decl.ident = ident
@@ -185,10 +203,38 @@ class Parser:
             self.consume_token(';')
             token = self.get_next_token()
         # consume Stmts
+        # TODO: consume stmts
         self.consume_token('}')
         return stmtBlock
     
-    def get_stmt():
+    def get_stmt(self):
+        stmt_func_map = {'T_If': self.get_ifstmt,
+                          'T_While': self.get_whilestmt,
+                          'T_For': self.get_forstmt,
+                          'T_Break': self.get_breakstmt,
+                          'T_Return': self.get_returnstmt,
+                          'T_Print': self.get_printstmt}
+        token = self.get_next_token()
+        if token.name not in stmt_func_map:
+            raise ParseError
+        return stmt_func_map[token.name]()
+    
+    def get_ifstmt(self):
+        pass
+    
+    def get_whilestmt(self):
+        pass
+    
+    def get_forstmt(self):
+        pass
+    
+    def get_breakstmt(self):
+        pass
+    
+    def get_returnstmt(self):
+        pass
+    
+    def get_printstmt(self):
         pass
     
     def get_next_token(self):
