@@ -82,33 +82,50 @@ class StmtBlock(ASTNode):
         for vardecl in self.vardecls:
             vardecl.print_tree(tablevel+1)
         # TODO: print stmts
+        for stmt in self.stmts:
+            stmt.print_tree(tablevel+1)
 
 class Stmt(ASTNode):
     pass
 
 class IfStmt(Stmt):
-    pass
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}IfStmt:'.format(' '*3*tablevel, prefix))
+        # TODO: print expression
+        self.stmt.print_tree(tablevel+1, '(then) ')
+        if self.elsestmt != None:
+            self.elsestmt.print_tree(tablevel+1, '(else) ')
 
 class WhileStmt(Stmt):
-    pass
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}WhileStmt:'.format(' '*3*tablevel, prefix))
+        # TODO: print expression
+        self.stmt.print_tree(tablevel+1, '(body) ')
 
 class ForStmt(Stmt):
-    pass
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}ForStmt:'.format(' '*3*tablevel, prefix))
+        # TODO: print expression
+        self.stmt.print_tree(tablevel+1, '(body) ')
 
 class BreakStmt(Stmt):
-    pass
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}BreakStmt:'.format(' '*3*tablevel, prefix))
 
 class ReturnStmt(Stmt):
-    pass
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}ReturnStmt:'.format(' '*3*tablevel, prefix))
+        # TODO: print arg Exprs
 
 class PrintStmt(Stmt):
-    pass
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}PrintStmt:'.format(' '*3*tablevel, prefix))
+        # TODO: print args
 
 
     
 class Type(ASTNode):
-    def print_tree(self, tablevel = 0, prefix = None):
-        prefix = prefix + ' ' if prefix != None else ''
+    def print_tree(self, tablevel = 0, prefix = ''):
         print('   {:}{:}Type: {:}'.format(' '*3*tablevel, prefix, self.typeval))
 
 class Parser:
@@ -203,7 +220,8 @@ class Parser:
             self.consume_token(';')
             token = self.get_next_token()
         # consume Stmts
-        # TODO: consume stmts
+        while not self.get_next_token().istype('}'):
+            stmtBlock.stmts.append(self.get_stmt())
         self.consume_token('}')
         return stmtBlock
     
@@ -213,29 +231,68 @@ class Parser:
                           'T_For': self.get_forstmt,
                           'T_Break': self.get_breakstmt,
                           'T_Return': self.get_returnstmt,
-                          'T_Print': self.get_printstmt}
+                          'T_Print': self.get_printstmt,
+                          '{': self.get_stmtblock}
         token = self.get_next_token()
         if token.name not in stmt_func_map:
             raise ParseError
         return stmt_func_map[token.name]()
     
     def get_ifstmt(self):
-        pass
+        ifstmt = IfStmt()
+        self.consume_token('T_If')
+        self.consume_token('(')
+        # TODO: parse and assign Expr
+        self.consume_token(')')
+        ifstmt.stmt = self.get_stmt()
+        ifstmt.elsestmt = None
+        if self.get_next_token().istype('T_Else'):
+            self.consume_token('T_Else')
+            ifstmt.elsestmt = self.get_stmt()
+        return ifstmt
     
     def get_whilestmt(self):
-        pass
+        whileStmt = WhileStmt()
+        self.consume_token('T_While')
+        self.consume_token('(')
+        # TODO: consume Expr
+        self.consume_token(')')
+        whileStmt.stmt = self.get_stmt()
+        return whileStmt
     
     def get_forstmt(self):
-        pass
+        forStmt = ForStmt()
+        self.consume_token('T_For')
+        self.consume_token('(')
+        # TODO: check for and consume init Expr
+        self.consume_token(';')
+        # TODO: consume condition Expr
+        self.consume_token(';')
+        # TODO: check for and consume step Expr
+        self.consume_token(')')
+        forStmt.stmt = self.get_stmt()
+        return forStmt
     
     def get_breakstmt(self):
-        pass
+        self.consume_token('T_Break')
+        self.consume_token(';')
+        return BreakStmt()
     
     def get_returnstmt(self):
-        pass
+        returnStmt = ReturnStmt()
+        self.consume_token('T_Return')
+        self.consume_token(';')
+        # TODO: check for and consume return Expr
+        return returnStmt
     
     def get_printstmt(self):
-        pass
+        printStmt = PrintStmt()
+        self.consume_token('T_Print')
+        self.consume_token('(')
+        # TODO: consume arg Exprs
+        self.consume_token(')')
+        self.consume_token(';')
+        return printStmt
     
     def get_next_token(self):
         if self.pos >= len(self.tokenlist):
