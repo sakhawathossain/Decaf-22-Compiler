@@ -213,10 +213,18 @@ class ConstantExpr(Expr):
         print('{:>3}{:}{:}{:}: {:}'.format(self.line, ' '*3*tablevel, prefix, self.token.name[2:], self.token.value))
 
 class ReadIntegerExpr(Expr):
-    pass
+    def __init__(self, line):
+        self.line = line
+        
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}ReadIntegerExpr:'.format(self.line, ' '*3*tablevel, prefix))
 
 class ReadLineExpr(Expr):
-    pass
+    def __init__(self, line):
+        self.line = line
+        
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}ReadLineExpr:'.format(self.line, ' '*3*tablevel, prefix))
 
 class Parser:
     
@@ -521,7 +529,9 @@ class Parser:
                 self.consume_token(')')
                 return expr
             else:
-                return IdentExpr(L)
+                if L == None:
+                    self.consume_token()
+                return IdentExpr(token)
         elif token.name in ['T_IntConstant', 'T_DoubleConstant', 'T_StringConstant', 'T_BoolConstant']:
             self.consume_token()
             return ConstantExpr(token)
@@ -531,11 +541,18 @@ class Parser:
             self.consume_token(')')
             return expr
         elif token.istype('T_ReadInteger'):
-            self.consume_token()
-            return ReadIntegerExpr()
+            tok = self.consume_token()
+            self.consume_token('(')
+            # TODO: consume actuals
+            self.consume_token(')')
+            return ReadIntegerExpr(tok.line)
         elif token.istype('T_ReadLine'):
+            tok = self.consume_token()
             self.consume_token()
-            return ReadLineExpr()
+            self.consume_token('(')
+            # TODO: consume actuals
+            self.consume_token(')')
+            return ReadLineExpr(tok.line)
         else:
             raise ParseError
         
