@@ -41,7 +41,8 @@ class Program(ASTNode):
     def __init__(self):
         self.decls = []
     def print_tree(self):
-        print('   Program:')
+        print()
+        print('   Program: ')
         for decl in self.decls:
             decl.print_tree(tablevel = 1)
         
@@ -56,7 +57,7 @@ class VariableDecl(Decl):
             self.ident = variable.ident
             
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}{:}{:}VarDecl:'.format(self.type_.line, ' '*3*tablevel, prefix))
+        print('{:>3}{:}{:}VarDecl: '.format(self.type_.line, ' '*3*tablevel, prefix))
         self.type_.print_tree(tablevel+1)
         print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(tablevel+1), self.ident.lexeme))
 
@@ -65,7 +66,7 @@ class Variable():
     
 class FunctionDecl(Decl):
     def print_tree(self, tablevel = 0):
-        print('{:>3}{:}FnDecl:'.format(self.type_.line, ' '*3*tablevel))
+        print('{:>3}{:}FnDecl: '.format(self.type_.line, ' '*3*tablevel))
         self.type_.print_tree(tablevel+1, '(return type) ')
         print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(tablevel+1), self.ident.lexeme))
         for vardecl in self.formals:
@@ -82,10 +83,9 @@ class StmtBlock(ASTNode):
         self.stmts = []
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}StmtBlock:'.format(' '*3*tablevel, prefix))
+        print('   {:}{:}StmtBlock: '.format(' '*3*tablevel, prefix))
         for vardecl in self.vardecls:
             vardecl.print_tree(tablevel+1)
-        # TODO: print stmts
         for stmt in self.stmts:
             stmt.print_tree(tablevel+1)
 
@@ -94,7 +94,7 @@ class Stmt(ASTNode):
 
 class IfStmt(Stmt):
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}IfStmt:'.format(' '*3*tablevel, prefix))
+        print('   {:}{:}IfStmt: '.format(' '*3*tablevel, prefix))
         self.test.print_tree(tablevel + 1, '(test) ')
         self.stmt.print_tree(tablevel + 1, '(then) ')
         if self.elsestmt != None:
@@ -102,7 +102,7 @@ class IfStmt(Stmt):
 
 class WhileStmt(Stmt):
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}WhileStmt:'.format(' '*3*tablevel, prefix))
+        print('   {:}{:}WhileStmt: '.format(' '*3*tablevel, prefix))
         self.test.print_tree(tablevel + 1, '(test) ')
         self.stmt.print_tree(tablevel + 1, '(body) ')
 
@@ -113,12 +113,16 @@ class ForStmt(Stmt):
         self.step = None
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}ForStmt:'.format(' '*3*tablevel, prefix))
+        print('   {:}{:}ForStmt: '.format(' '*3*tablevel, prefix))
         if self.init:
             self.init.print_tree(tablevel + 1, '(init) ')
-        self.test.print_tree(tablevel + 1, '(test )')
+        else:
+            print('   {:}(init) Empty: '.format(' '*3*(tablevel+1)))
+        self.test.print_tree(tablevel + 1, '(test) ')
         if self.step:
-            self.step.print_tree(tablevel + 1, '(test) ')
+            self.step.print_tree(tablevel + 1, '(step) ')
+        else:
+            print('   {:}(step) Empty: '.format(' '*3*(tablevel+1)))
         self.stmt.print_tree(tablevel+1, '(body) ')
 
 class BreakStmt(Stmt):
@@ -126,48 +130,55 @@ class BreakStmt(Stmt):
         self.line = line
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}   {:}{:}BreakStmt:'.format(self.line, ' '*3*tablevel, prefix))
+        print('{:>3}{:}{:}BreakStmt: '.format(self.line, ' '*3*tablevel, prefix))
 
 class ReturnStmt(Stmt):
     def __init__(self):
         self.expr = None
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}   {:}{:}ReturnStmt:'.format(self.line, ' '*3*tablevel, prefix))
+        print('{:>3}{:}{:}ReturnStmt: '.format(self.line, ' '*3*tablevel, prefix))
         if self.expr:
             self.expr.print_tree(tablevel + 1)
         else:
-            print('   {:}Empty:'.format(' '*3*(tablevel+1)))
+            print('   {:}Empty: '.format(' '*3*(tablevel+1)))
 
 class PrintStmt(Stmt):
+    def __init__(self):
+        self.exprs = []
+        
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}PrintStmt:'.format(' '*3*tablevel, prefix))
-        # TODO: print args
+        print('   {:}{:}PrintStmt: '.format(' '*3*tablevel, prefix))
+        for expr in self.exprs:
+            expr.print_tree(tablevel + 1, '(args) ')
 
 class Expr(ASTNode):
     pass
 
 class AssignExpr(Expr):
-    def __init__(self, L, R):
+    def __init__(self, L, op, R):
         self.L = L
+        self.op = op
         self.R = R
+        self.line = L.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}AssignExpr:'.format(' '*3*tablevel, prefix))
+        print('{:>3}{:}{:}AssignExpr: '.format(self.line, ' '*3*tablevel, prefix))
         self.L.print_tree(tablevel + 1)
-        print('   {:}Operator: ='.format(' '*3*(tablevel+1)))
+        print('{:>3}{:}Operator: ='.format(self.op.line, ' '*3*(tablevel+1)))
         self.R.print_tree(tablevel + 1)
 
 class CallExpr(Expr):
     def __init__(self, ident = None, actuals = []):
         self.ident = ident
         self.actuals = actuals
+        self.line = self.ident.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}Call:'.format(' '*3*tablevel, prefix))
-        self.ident.print_tree(tablevel + 1)
+        print('{:>3}{:}{:}Call: '.format(self.line, ' '*3*tablevel, prefix))
+        print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(tablevel+1), self.ident.lexeme))
         for actual in self.actuals:
-            actual.print_tree(tablevel+1, '(actuals)')
+            actual.print_tree(tablevel+1, '(actuals) ')
 
 class BinaryExpr(Expr):
     def __init__(self, exprname, L = None, op = None, R = None):
@@ -178,7 +189,7 @@ class BinaryExpr(Expr):
         self.line = self.L.line
     
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}{:}{:}{:}:'.format(self.line,' '*3*tablevel, prefix, self.exprname))
+        print('{:>3}{:}{:}{:}: '.format(self.line,' '*3*tablevel, prefix, self.exprname))
         self.L.print_tree(tablevel + 1)
         print('{:>3}{:}Operator: {:}'.format(self.op.line, ' '*3*(tablevel+1), self.op.lexeme))
         self.R.print_tree(tablevel + 1)
@@ -191,7 +202,7 @@ class UnaryExpr(Expr):
         self.exprname = 'ArithmeticExpr' if op.name == '-' else 'LogicalExpr'
     
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}{:}{:}{:}:'.format(self.line,' '*3*tablevel, prefix, self.exprname))
+        print('{:>3}{:}{:}{:}: '.format(self.line,' '*3*tablevel, prefix, self.exprname))
         print('{:>3}{:}Operator: {:}'.format(self.op.line, ' '*3*(tablevel+1), self.op.name))
         self.R.print_tree(tablevel + 1)
 
@@ -201,30 +212,36 @@ class IdentExpr(Expr):
         self.line = token.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}{:}{:}FieldAccess:'.format(self.line, ' '*3*tablevel, prefix))
+        print('{:>3}{:}{:}FieldAccess: '.format(self.line, ' '*3*tablevel, prefix))
         print('{:>3}{:}Identifier: {:}'.format(self.line, ' '*3*(tablevel+1), self.token.lexeme))
 
 class ConstantExpr(Expr):
     def __init__(self, token):
         self.token = token
         self.line = token.line
+        self.printval = token.value
+        if self.token.name == 'T_StringConstant':
+            self.printval = '"' + token.value + '"'
+        if self.token.name == 'T_BoolConstant':
+            self.printval = str(self.token.value).lower()
+        #self.printval = '"' + token.value + '"' if self.token.name == 'T_StringConstant' else token.value
     
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}{:}{:}{:}: {:}'.format(self.line, ' '*3*tablevel, prefix, self.token.name[2:], self.token.value))
+        print('{:>3}{:}{:}{:}: {:}'.format(self.line, ' '*3*tablevel, prefix, self.token.name[2:], self.printval))
 
 class ReadIntegerExpr(Expr):
     def __init__(self, line):
         self.line = line
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}{:}{:}ReadIntegerExpr:'.format(self.line, ' '*3*tablevel, prefix))
+        print('{:>3}{:}{:}ReadIntegerExpr: '.format(self.line, ' '*3*tablevel, prefix))
 
 class ReadLineExpr(Expr):
     def __init__(self, line):
         self.line = line
         
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}{:}{:}ReadLineExpr:'.format(self.line, ' '*3*tablevel, prefix))
+        print('{:>3}{:}{:}ReadLineExpr: '.format(self.line, ' '*3*tablevel, prefix))
 
 class Parser:
     
@@ -304,12 +321,13 @@ class Parser:
         # consume variableDecls
         stmtBlock = StmtBlock()
         token = self.get_next_token()
-        while token.name in ['T_Int', 'T_Double', 'T_Bool', 'T_String']:
+        while self.get_next_token().name in ['T_Int', 'T_Double', 'T_Bool', 'T_String']:
             stmtBlock.vardecls.append(VariableDecl(self.get_variable()))
             self.consume_token(';')
-            token = self.get_next_token()
         # consume Stmts
         while not self.get_next_token().istype('}'):
+            #print('Looking for the next stmt in while block')
+            #print([(t.name, t.lexeme) for t in self.tokenlist[self.pos:]])
             stmt = self.get_stmt()
             if stmt != None:
                 stmtBlock.stmts.append(stmt)
@@ -386,13 +404,17 @@ class Parser:
         return returnstmt
     
     def get_printstmt(self):
-        printStmt = PrintStmt()
-        self.consume_token('T_Print')
+        printstmt = PrintStmt()
+        token = self.consume_token('T_Print')
+        printstmt.line = token.line
         self.consume_token('(')
-        # TODO: consume arg Exprs
+        printstmt.exprs.append(self.get_expr())
+        while not self.get_next_token().istype(')'):
+            self.consume_token(',')
+            printstmt.exprs.append(self.get_expr())
         self.consume_token(')')
         self.consume_token(';')
-        return printStmt
+        return printstmt
     
     def get_expr(self):
         '''
@@ -435,8 +457,8 @@ class Parser:
             self.consume_token()
             if self.get_next_token().istype('='):
                 # Expr ::= ident = Eor
-                self.consume_token()
-                return AssignExpr(IdentExpr(L), self.get_expr_or())               
+                op = self.consume_token()
+                return AssignExpr(IdentExpr(L), op, self.get_expr_or())               
             else:
                 # Expr ::= Eor
                 return self.get_expr_or(L)
@@ -446,7 +468,7 @@ class Parser:
     def get_expr_or(self, L = None):
         expr = self.get_expr_and(L)
         token = self.get_next_token()
-        while token.istype('||'):
+        while token.istype('T_Or'):
             self.consume_token()
             right = self.get_expr_and()
             expr = BinaryExpr('LogicalExpr', expr, token, right)
@@ -469,7 +491,7 @@ class Parser:
         while token.lexeme in ['==', '!=']:
             self.consume_token()
             right = self.get_expr_rel()
-            expr = BinaryExpr('LogicalExpr', expr, token, right)
+            expr = BinaryExpr('EqualityExpr', expr, token, right)
             token = self.get_next_token()
         return expr
     
@@ -525,8 +547,9 @@ class Parser:
             if self.get_next_token().istype('('):
                 # ident (Actuals)
                 self.consume_token('(')
-                expr = CallExpr(IdentExpr(L), self.get_actuals())
+                expr = CallExpr(L, self.get_actuals())
                 self.consume_token(')')
+
                 return expr
             else:
                 if L == None:
@@ -543,14 +566,12 @@ class Parser:
         elif token.istype('T_ReadInteger'):
             tok = self.consume_token()
             self.consume_token('(')
-            # TODO: consume actuals
             self.consume_token(')')
             return ReadIntegerExpr(tok.line)
         elif token.istype('T_ReadLine'):
             tok = self.consume_token()
             self.consume_token()
             self.consume_token('(')
-            # TODO: consume actuals
             self.consume_token(')')
             return ReadLineExpr(tok.line)
         else:
@@ -558,8 +579,13 @@ class Parser:
         
             
     def get_actuals(self):
-        # TODO: implement
-        return []
+        actuals = []
+        if not self.get_next_token().istype(')'):
+            actuals.append(self.get_expr())
+        while not self.get_next_token().istype(')'):
+            self.consume_token(',')
+            actuals.append(self.get_expr())            
+        return actuals
             
     
     def get_next_token(self):
@@ -581,10 +607,10 @@ class Parser:
     """ print the corresponding line and highlight the token that caused the error """
     def print_error(self, token):
         line, start, end = token.line-1, token.start-1, token.end-1
-        print('*** error line {:}.'.format(line+1))
+        print('\n*** Error line {:}.'.format(line+1))
         print(self.textlines[line])
         print(' '* start + '^' * (end - start + 1))
-        print('*** syntax error')
+        print('*** syntax error\n')
             
 
     def parse(self):
@@ -594,7 +620,11 @@ class Parser:
             self.print_error(self.get_next_token())
             return
         program.print_tree()
-        return    
+        return  
+    
+    def dt(self):
+        print([tok.name for tok in self.tokenlist[self.pos:]])
+        return
 
 
         
