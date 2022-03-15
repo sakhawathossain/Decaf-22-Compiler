@@ -263,13 +263,15 @@ class ReadLineExpr(Expr):
         print('{:>3}{:}{:}ReadLineExpr: '.format(self.line, ' '*3*tablevel, prefix))
 
 class Parser:
+    """Parser for Decaf-22"""
     
-    def __init__(self, text):
+    def __init__(self, text, verbose = False):
         self.text = text
         self.textlines = text.split('\n')
         tokenlist = Scanner().scan(self.text)
         self.tokenlist = [Token(*item) for item in tokenlist]
         self.pos = 0
+        self.verbose = verbose
         return
         
     def get_program(self):
@@ -577,42 +579,57 @@ class Parser:
         return actuals
     
     def is_next_token(self, name):
+        """
+        return True if the next token type matches argumemnt
+        if name is not of type str, assume it is an collection of string
+        if a collection is passed, then return True if any of them match the next token type
+        """
         if isinstance(name, str):
             return self.get_next_token().name == name
         return any([self.get_next_token().name == n for n in name])
             
-    
     def get_next_token(self):
+        """
+        returns a reference to the next token object
+        this does not consume the token
+        """
         if self.pos >= len(self.tokenlist):
             return None
         return self.tokenlist[self.pos]
     
-    """ consume the next token and advance pointer """
-    """ if a token name is given, then check if the next token matches the given name """
-    """ otherwise, raise exception """
     def consume_token(self, name = None):
+        """
+        consume the next token and advance token pointer
+        if a token name is given, then check if the next token matches the given name
+        if there is a mismatch, raise exception
+        """
         if name != None:
             if not self.is_next_token(name):
                 raise ParseError
         self.pos += 1
         return self.tokenlist[self.pos-1]
         
-    """ print the corresponding line and highlight the token that caused the error """
     def print_error(self, token):
+        """
+        print the corresponding line and highlight the token that caused the error
+        """
         print('\n*** Error line {:}.'.format(token.line))
         print(self.textlines[token.line-1])
         print(' '* (token.start - 1) + '^' * (token.end - token.start + 1))
         print('*** syntax error\n')
             
-
     def parse(self):
+        """
+        parse the input string
+        """
         try:
             program = self.get_program()
         except ParseError:
             self.print_error(self.get_next_token())
             return
-        program.print_tree()
-        return  
+        if self.verbose:
+            program.print_tree()
+        return program
 
 
 if __name__ == "__main__":
@@ -623,6 +640,6 @@ if __name__ == "__main__":
         try:
             with open(path) as file:
                 text = file.read()
-                Parser(text).parse()
+                Parser(text, verbose = True).parse()
         except IOError:
             print('Could not read file: {0}'.format(path))
