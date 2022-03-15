@@ -71,6 +71,10 @@ class FunctionDecl(Decl):
         for vardecl in self.formals:
             vardecl.print_tree(tablevel + 1, '(formals) ')
         self.stmtblock.print_tree(tablevel + 1, '(body) ')
+        
+class Type(ASTNode):
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}Type: {:}'.format(' '*3*tablevel, prefix, self.typeval))
             
 class StmtBlock(ASTNode):
     def __init__(self):
@@ -91,42 +95,128 @@ class Stmt(ASTNode):
 class IfStmt(Stmt):
     def print_tree(self, tablevel = 0, prefix = ''):
         print('   {:}{:}IfStmt:'.format(' '*3*tablevel, prefix))
-        # TODO: print expression
-        self.stmt.print_tree(tablevel+1, '(then) ')
+        self.test.print_tree(tablevel + 1, '(test) ')
+        self.stmt.print_tree(tablevel + 1, '(then) ')
         if self.elsestmt != None:
             self.elsestmt.print_tree(tablevel+1, '(else) ')
 
 class WhileStmt(Stmt):
     def print_tree(self, tablevel = 0, prefix = ''):
         print('   {:}{:}WhileStmt:'.format(' '*3*tablevel, prefix))
-        # TODO: print expression
-        self.stmt.print_tree(tablevel+1, '(body) ')
+        self.test.print_tree(tablevel + 1, '(test) ')
+        self.stmt.print_tree(tablevel + 1, '(body) ')
 
 class ForStmt(Stmt):
+    def __init__(self):
+        self.init = None
+        self.test = None
+        self.step = None
+        
     def print_tree(self, tablevel = 0, prefix = ''):
         print('   {:}{:}ForStmt:'.format(' '*3*tablevel, prefix))
-        # TODO: print expression
+        if self.init:
+            self.init.print_tree(tablevel + 1, '(init) ')
+        self.test.print_tree(tablevel + 1, '(test )')
+        if self.step:
+            self.step.print_tree(tablevel + 1, '(test) ')
         self.stmt.print_tree(tablevel+1, '(body) ')
 
 class BreakStmt(Stmt):
+    def __init__(self, line):
+        self.line = line
+        
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}BreakStmt:'.format(' '*3*tablevel, prefix))
+        print('{:>3}   {:}{:}BreakStmt:'.format(self.line, ' '*3*tablevel, prefix))
 
 class ReturnStmt(Stmt):
+    def __init__(self):
+        self.expr = None
+        
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}ReturnStmt:'.format(' '*3*tablevel, prefix))
-        # TODO: print arg Exprs
+        print('{:>3}   {:}{:}ReturnStmt:'.format(self.line, ' '*3*tablevel, prefix))
+        if self.expr:
+            self.expr.print_tree(tablevel + 1)
+        else:
+            print('   {:}Empty:'.format(' '*3*(tablevel+1)))
 
 class PrintStmt(Stmt):
     def print_tree(self, tablevel = 0, prefix = ''):
         print('   {:}{:}PrintStmt:'.format(' '*3*tablevel, prefix))
         # TODO: print args
 
+class Expr(ASTNode):
+    pass
 
-    
-class Type(ASTNode):
+class AssignExpr(Expr):
+    def __init__(self, L, R):
+        self.L = L
+        self.R = R
+        
     def print_tree(self, tablevel = 0, prefix = ''):
-        print('   {:}{:}Type: {:}'.format(' '*3*tablevel, prefix, self.typeval))
+        print('   {:}{:}AssignExpr:'.format(' '*3*tablevel, prefix))
+        self.L.print_tree(tablevel + 1)
+        print('   {:}Operator: ='.format(' '*3*(tablevel+1)))
+        self.R.print_tree(tablevel + 1)
+
+class CallExpr(Expr):
+    def __init__(self, ident = None, actuals = []):
+        self.ident = ident
+        self.actuals = actuals
+        
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('   {:}{:}Call:'.format(' '*3*tablevel, prefix))
+        self.ident.print_tree(tablevel + 1)
+        for actual in self.actuals:
+            actual.print_tree(tablevel+1, '(actuals)')
+
+class BinaryExpr(Expr):
+    def __init__(self, exprname, L = None, op = None, R = None):
+        self.exprname = exprname
+        self.L = L
+        self.op = op
+        self.R = R
+        self.line = self.L.line
+    
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}{:}:'.format(self.line,' '*3*tablevel, prefix, self.exprname))
+        self.L.print_tree(tablevel + 1)
+        print('{:>3}{:}Operator: {:}'.format(self.op.line, ' '*3*(tablevel+1), self.op.lexeme))
+        self.R.print_tree(tablevel + 1)
+
+class UnaryExpr(Expr):
+    def __init__(self, op, R):
+        self.op = op
+        self.R = R
+        self.line = op.line
+        self.exprname = 'ArithmeticExpr' if op.name == '-' else 'LogicalExpr'
+    
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}{:}:'.format(self.line,' '*3*tablevel, prefix, self.exprname))
+        print('{:>3}{:}Operator: {:}'.format(self.op.line, ' '*3*(tablevel+1), self.op.name))
+        self.R.print_tree(tablevel + 1)
+
+class IdentExpr(Expr):
+    def __init__(self, token):
+        self.token = token
+        self.line = token.line
+        
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}FieldAccess:'.format(self.line, ' '*3*tablevel, prefix))
+        print('{:>3}{:}Identifier: {:}'.format(self.line, ' '*3*(tablevel+1), self.token.lexeme))
+
+class ConstantExpr(Expr):
+    def __init__(self, token):
+        self.token = token
+        self.line = token.line
+    
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}{:}: {:}'.format(self.line, ' '*3*tablevel, prefix, self.token.name[2:], self.token.value))
+
+class ReadIntegerExpr(Expr):
+    pass
+
+class ReadLineExpr(Expr):
+    pass
 
 class Parser:
     
@@ -136,15 +226,6 @@ class Parser:
         tokenlist = Scanner().scan(self.text)
         self.tokenlist = [Token(*item) for item in tokenlist]
         self.pos = 0
-        return
-        
-    def parse(self):
-        try:
-            program = self.get_program()
-        except ParseError:
-            self.print_error(self.get_next_token())
-            return
-        program.print_tree()
         return
         
     def get_program(self):
@@ -221,7 +302,9 @@ class Parser:
             token = self.get_next_token()
         # consume Stmts
         while not self.get_next_token().istype('}'):
-            stmtBlock.stmts.append(self.get_stmt())
+            stmt = self.get_stmt()
+            if stmt != None:
+                stmtBlock.stmts.append(stmt)
         self.consume_token('}')
         return stmtBlock
     
@@ -234,15 +317,20 @@ class Parser:
                           'T_Print': self.get_printstmt,
                           '{': self.get_stmtblock}
         token = self.get_next_token()
-        if token.name not in stmt_func_map:
-            raise ParseError
-        return stmt_func_map[token.name]()
+        if token.name in stmt_func_map:
+            return stmt_func_map[token.name]()
+        elif token.istype(';'):
+            return None
+        else:
+            expr = self.get_expr()
+            self.consume_token(';')
+            return expr
     
     def get_ifstmt(self):
         ifstmt = IfStmt()
         self.consume_token('T_If')
         self.consume_token('(')
-        # TODO: parse and assign Expr
+        ifstmt.test = self.get_expr()
         self.consume_token(')')
         ifstmt.stmt = self.get_stmt()
         ifstmt.elsestmt = None
@@ -252,38 +340,42 @@ class Parser:
         return ifstmt
     
     def get_whilestmt(self):
-        whileStmt = WhileStmt()
+        whilestmt = WhileStmt()
         self.consume_token('T_While')
         self.consume_token('(')
-        # TODO: consume Expr
+        whilestmt.test = self.get_expr()
         self.consume_token(')')
-        whileStmt.stmt = self.get_stmt()
-        return whileStmt
+        whilestmt.stmt = self.get_stmt()
+        return whilestmt
     
     def get_forstmt(self):
-        forStmt = ForStmt()
+        forstmt = ForStmt()
         self.consume_token('T_For')
         self.consume_token('(')
-        # TODO: check for and consume init Expr
+        if not self.get_next_token().istype(';'):
+            forstmt.init = self.get_expr()
         self.consume_token(';')
-        # TODO: consume condition Expr
+        forstmt.test = self.get_expr()
         self.consume_token(';')
-        # TODO: check for and consume step Expr
+        if not self.get_next_token().istype(')'):
+            forstmt.step = self.get_expr()
         self.consume_token(')')
-        forStmt.stmt = self.get_stmt()
-        return forStmt
+        forstmt.stmt = self.get_stmt()
+        return forstmt
     
     def get_breakstmt(self):
-        self.consume_token('T_Break')
+        token = self.consume_token('T_Break')
         self.consume_token(';')
-        return BreakStmt()
+        return BreakStmt(token.line)
     
     def get_returnstmt(self):
-        returnStmt = ReturnStmt()
-        self.consume_token('T_Return')
+        returnstmt = ReturnStmt()
+        token = self.consume_token('T_Return')
+        returnstmt.line = token.line
+        if not self.get_next_token().istype(';'):
+            returnstmt.expr = self.get_expr()
         self.consume_token(';')
-        # TODO: check for and consume return Expr
-        return returnStmt
+        return returnstmt
     
     def get_printstmt(self):
         printStmt = PrintStmt()
@@ -293,6 +385,165 @@ class Parser:
         self.consume_token(')')
         self.consume_token(';')
         return printStmt
+    
+    def get_expr(self):
+        '''
+        Reference grammar:
+        Expr    ::=  LValue = Expr | Constant | LValue | Call | (Expr) |
+                     Expr + Expr | Expr - Expr | Expr * Expr | Expr = Expr |
+                     Expr % Expr | - Expr | Expr < Expr | Expr <= Expr |
+                     Expr > Expr | Expr >= Expr | Expr == Expr | Expr ! = Expr |
+                     Expr && Expr | Expr || Expr | ! Expr | ReadInteger() |
+                     ReadLine()
+        LValue  ::   ident
+        Call    ::=  ident ( Actuals )
+        Actuals ::=  Expr+, | eps  
+                 
+        Operator precedence:
+        ! -          (unary -, logical not)
+        * / %        (multiply, divide, mod)
+        + -          (addition, subtraction)
+        < <= > >=    (relational)
+        == !=        (equality)
+        &&           (logical and)
+        ||           (logical or)
+        =            (assignment)
+                 
+        Modified grammar:
+        Expr    ::=  ident = Eor | Eor
+        Eor     ::=  End || Eor | End
+        End     ::=  Eeq && End | Eeq
+        Eeq     ::=  Ere (==, !=) Eeq | Ere ### Check with prof if associative
+        Ere     ::=  Ead (<, <=, >, >=) Ead | Ead
+        Ead     ::=  Epr (+, -) Ead | Epr
+        Epr     ::=  Eun (*, /, %) Epr | Eun
+        Eun     ::=  (!, -) Eun | T
+        T       ::=  Constant | ident Q | (Eor) | ReadInteger() | ReadLine()
+        Q       ::=  (Expr+,) | eps
+        '''
+        
+        L = self.get_next_token()
+        if L.istype('T_Identifier'):
+            self.consume_token()
+            if self.get_next_token().istype('='):
+                # Expr ::= ident = Eor
+                self.consume_token()
+                return AssignExpr(IdentExpr(L), self.get_expr_or())               
+            else:
+                # Expr ::= Eor
+                return self.get_expr_or(L)
+        else:
+            return self.get_expr_or()
+                
+    def get_expr_or(self, L = None):
+        expr = self.get_expr_and(L)
+        token = self.get_next_token()
+        while token.istype('||'):
+            self.consume_token()
+            right = self.get_expr_and()
+            expr = BinaryExpr('LogicalExpr', expr, token, right)
+            token = self.get_next_token()
+        return expr
+        
+    def get_expr_and(self, L = None):
+        expr = self.get_expr_eq(L)
+        token = self.get_next_token()
+        while token.istype('T_And'):
+            self.consume_token()
+            right = self.get_expr_eq()
+            expr = BinaryExpr('LogicalExpr', expr, token, right)
+            token = self.get_next_token()
+        return expr
+    
+    def get_expr_eq(self, L = None):
+        expr = self.get_expr_rel(L)
+        token = self.get_next_token()
+        while token.lexeme in ['==', '!=']:
+            self.consume_token()
+            right = self.get_expr_rel()
+            expr = BinaryExpr('LogicalExpr', expr, token, right)
+            token = self.get_next_token()
+        return expr
+    
+    def get_expr_rel(self, L = None):
+        expr = self.get_expr_add(L)
+        token = self.get_next_token()
+        while token.lexeme in ['<', '<=', '>', '>=']:
+            self.consume_token()
+            right = self.get_expr_add() # no associativity
+            expr = BinaryExpr('RelationalExpr', expr, token, right)
+            token = self.get_next_token()
+        return expr
+    
+    def get_expr_add(self, L = None):
+        expr = self.get_expr_prod(L)
+        token = self.get_next_token()
+        while token.name in ['+', '-']:
+            self.consume_token()
+            right = self.get_expr_prod()
+            expr = BinaryExpr('ArithmeticExpr', expr, token, right)
+            token = self.get_next_token()
+        return expr
+    
+    def get_expr_prod(self, L = None):
+        expr = self.get_expr_unary(L)
+        token = self.get_next_token()
+        while token.name in ['*', '/', '%']:
+            self.consume_token()
+            right = self.get_expr_unary()
+            expr = BinaryExpr('ArithmeticExpr', expr, token, right)
+            token = self.get_next_token()
+        return expr
+    
+    def get_expr_unary(self, L = None):
+        #print('Get unary: remaining tokens')
+        #for k, tok in zip(range(self.pos, len(self.tokenlist)), self.tokenlist[self.pos:]):
+        #    print('\t', k, ':', tok.name, tok.lexeme)
+        if L == None: 
+            token = self.get_next_token()             
+            if token.name in ['-', '!']:
+                self.consume_token()
+                return UnaryExpr(token, self.get_expr_unary())
+            else:
+                return self.get_terminal()
+        return self.get_terminal(L)
+    
+    def get_terminal(self, L = None):
+        if L == None:
+            token = self.get_next_token()
+        else:
+            token = L
+        if token.istype('T_Identifier'):
+            if self.get_next_token().istype('('):
+                # ident (Actuals)
+                self.consume_token('(')
+                expr = CallExpr(IdentExpr(L), self.get_actuals())
+                self.consume_token(')')
+                return expr
+            else:
+                return IdentExpr(L)
+        elif token.name in ['T_IntConstant', 'T_DoubleConstant', 'T_StringConstant', 'T_BoolConstant']:
+            self.consume_token()
+            return ConstantExpr(token)
+        elif token.istype('('):
+            self.consume_token('(')
+            expr = self.get_expr_or()
+            self.consume_token(')')
+            return expr
+        elif token.istype('T_ReadInteger'):
+            self.consume_token()
+            return ReadIntegerExpr()
+        elif token.istype('T_ReadLine'):
+            self.consume_token()
+            return ReadLineExpr()
+        else:
+            raise ParseError
+        
+            
+    def get_actuals(self):
+        # TODO: implement
+        return []
+            
     
     def get_next_token(self):
         if self.pos >= len(self.tokenlist):
@@ -319,7 +570,14 @@ class Parser:
         print('*** syntax error')
             
 
-        
+    def parse(self):
+        try:
+            program = self.get_program()
+        except ParseError:
+            self.print_error(self.get_next_token())
+            return
+        program.print_tree()
+        return    
 
 
         
