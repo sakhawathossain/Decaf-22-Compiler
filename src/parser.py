@@ -243,21 +243,27 @@ class ConstantExpr(Expr):
             self.printval = '"' + token.value + '"'
         if self.token.name == 'T_BoolConstant':
             self.printval = str(self.token.value).lower()
-        #self.printval = '"' + token.value + '"' if self.token.name == 'T_StringConstant' else token.value
     
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}{:}: {:}'.format(self.line, ' '*3*tablevel, prefix, self.token.name[2:], self.printval))
+        
+class Null(Expr):
+    def __init__(self, token):
+        self.line = token.line
+        
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}Null: '.format(self.line, ' '*3*tablevel, prefix))
 
 class ReadIntegerExpr(Expr):
-    def __init__(self, line):
-        self.line = line
+    def __init__(self, token):
+        self.line = token.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}ReadIntegerExpr: '.format(self.line, ' '*3*tablevel, prefix))
 
 class ReadLineExpr(Expr):
-    def __init__(self, line):
-        self.line = line
+    def __init__(self, token):
+        self.line = token.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}ReadLineExpr: '.format(self.line, ' '*3*tablevel, prefix))
@@ -456,122 +462,104 @@ class Parser:
         else:
             return self.get_expr_or()
                 
-    def get_expr_or(self, L = None):
-        expr = self.get_expr_and(L)
-        token = self.get_next_token()
-        while token.istype('T_Or'):
-            self.consume_token()
+    def get_expr_or(self, ident = None):
+        expr = self.get_expr_and(ident)
+        while self.is_next_token('T_Or'):
+            op = self.consume_token()
             right = self.get_expr_and()
-            expr = BinaryExpr('LogicalExpr', expr, token, right)
-            token = self.get_next_token()
+            expr = BinaryExpr('LogicalExpr', expr, op, right)
         return expr
         
-    def get_expr_and(self, L = None):
-        expr = self.get_expr_eq(L)
-        token = self.get_next_token()
-        while token.istype('T_And'):
-            self.consume_token()
+    def get_expr_and(self, ident = None):
+        expr = self.get_expr_eq(ident)
+        while self.is_next_token('T_And'):
+            op = self.consume_token()
             right = self.get_expr_eq()
-            expr = BinaryExpr('LogicalExpr', expr, token, right)
-            token = self.get_next_token()
+            expr = BinaryExpr('LogicalExpr', expr, op, right)
         return expr
     
-    def get_expr_eq(self, L = None):
-        expr = self.get_expr_rel(L)
-        token = self.get_next_token()
-        while token.lexeme in ['==', '!=']:
-            self.consume_token()
+    def get_expr_eq(self, ident = None):
+        expr = self.get_expr_rel(ident)
+        while self.is_next_token(['T_Equal', 'T_NotEqual']):
+            op = self.consume_token()
             right = self.get_expr_rel()
-            expr = BinaryExpr('EqualityExpr', expr, token, right)
-            token = self.get_next_token()
+            expr = BinaryExpr('EqualityExpr', expr, op, right)
         return expr
     
-    def get_expr_rel(self, L = None):
-        expr = self.get_expr_add(L)
-        token = self.get_next_token()
-        while token.lexeme in ['<', '<=', '>', '>=']:
-            self.consume_token()
+    def get_expr_rel(self, ident = None):
+        expr = self.get_expr_add(ident)
+        while self.is_next_token(['<', 'T_LessEqual', '>', 'T_GreaterEqual']):
+            op = self.consume_token()
             right = self.get_expr_add() # no associativity
-            expr = BinaryExpr('RelationalExpr', expr, token, right)
-            token = self.get_next_token()
+            expr = BinaryExpr('RelationalExpr', expr, op, right)
         return expr
     
-    def get_expr_add(self, L = None):
-        expr = self.get_expr_prod(L)
-        token = self.get_next_token()
-        while token.name in ['+', '-']:
-            self.consume_token()
+    def get_expr_add(self, ident = None):
+        expr = self.get_expr_prod(ident)
+        while self.is_next_token(['+', '-']):
+            op = self.consume_token()
             right = self.get_expr_prod()
-            expr = BinaryExpr('ArithmeticExpr', expr, token, right)
-            token = self.get_next_token()
+            expr = BinaryExpr('ArithmeticExpr', expr, op, right)
         return expr
     
-    def get_expr_prod(self, L = None):
-        expr = self.get_expr_unary(L)
-        token = self.get_next_token()
-        while token.name in ['*', '/', '%']:
-            self.consume_token()
+    def get_expr_prod(self, ident = None):
+        expr = self.get_expr_unary(ident)
+        while self.is_next_token(['*', '/', '%']):
+            op = self.consume_token()
             right = self.get_expr_unary()
-            expr = BinaryExpr('ArithmeticExpr', expr, token, right)
-            token = self.get_next_token()
+            expr = BinaryExpr('ArithmeticExpr', expr, op, right)
         return expr
     
-    def get_expr_unary(self, L = None):
-        #print('Get unary: remaining tokens')
-        #for k, tok in zip(range(self.pos, len(self.tokenlist)), self.tokenlist[self.pos:]):
-        #    print('\t', k, ':', tok.name, tok.lexeme)
-        if L == None: 
-            token = self.get_next_token()             
-            if token.name in ['-', '!']:
-                self.consume_token()
-                return UnaryExpr(token, self.get_expr_unary())
-            else:
-                return self.get_terminal()
-        return self.get_terminal(L)
+    def get_expr_unary(self, ident = None):
+        while self.is_next_token(['-', '!']):
+            op = self.consume_token()
+            return UnaryExpr(op, self.get_expr_unary())
+        return self.get_terminal(ident)
     
-    def get_terminal(self, L = None):
-        if L == None:
-            token = self.get_next_token()
-        else:
-            token = L
-        if token.istype('T_Identifier'):
+    def get_terminal(self, ident = None):
+        if ident != None:
+            if self.is_next_token('('):
+                self.consume_token('(')
+                expr = CallExpr(ident, self.get_actuals())
+                self.consume_token(')')
+                return expr
+            else:
+                return IdentExpr(ident)
+        if self.is_next_token('T_Identifier'):
+            ident = self.consume_token()
             if self.get_next_token().istype('('):
                 # ident (Actuals)
                 self.consume_token('(')
-                expr = CallExpr(L, self.get_actuals())
+                expr = CallExpr(ident, self.get_actuals())
                 self.consume_token(')')
-
                 return expr
             else:
-                if L == None:
-                    self.consume_token()
-                return IdentExpr(token)
-        elif token.name in ['T_IntConstant', 'T_DoubleConstant', 'T_StringConstant', 'T_BoolConstant']:
-            self.consume_token()
-            return ConstantExpr(token)
-        elif token.istype('('):
+                return IdentExpr(ident)
+        elif self.is_next_token(['T_IntConstant', 'T_DoubleConstant', 'T_StringConstant', 'T_BoolConstant']):
+            return ConstantExpr(self.consume_token())
+        elif self.is_next_token('T_Null'):
+            return Null(self.consume_token())
+        elif self.is_next_token('('):
             self.consume_token('(')
             expr = self.get_expr_or()
             self.consume_token(')')
             return expr
-        elif token.istype('T_ReadInteger'):
-            tok = self.consume_token()
+        elif self.is_next_token('T_ReadInteger'):
+            token = self.consume_token()
             self.consume_token('(')
             self.consume_token(')')
-            return ReadIntegerExpr(tok.line)
-        elif token.istype('T_ReadLine'):
-            tok = self.consume_token()
-            self.consume_token()
+            return ReadIntegerExpr(token)
+        elif self.is_next_token('T_ReadLine'):
+            token = self.consume_token()
             self.consume_token('(')
             self.consume_token(')')
-            return ReadLineExpr(tok.line)
+            return ReadLineExpr(token)
         else:
             raise ParseError
-        
             
     def get_actuals(self):
         actuals = []
-        if not self.get_next_token().istype(')'):
+        if not self.is_next_token(')'):
             actuals.append(self.get_expr())
         while not self.get_next_token().istype(')'):
             self.consume_token(',')
