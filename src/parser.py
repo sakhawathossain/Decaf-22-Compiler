@@ -284,6 +284,7 @@ class Parser:
     def __init__(self, text, verbose = False):
         self.text = text
         self.textlines = text.split('\n')
+        self.verbose = verbose
         tokenlist = Scanner().scan(self.text)
         self.tokenlist = [Token(*item) for item in tokenlist]
         # add an EOF token at the end to handle errors gracefully
@@ -295,15 +296,15 @@ class Parser:
         eof = Token('T_EOF', '', '', eof_line, eof_start, eof_end)
         self.tokenlist.append(eof)
         self.pos = 0
-        self.verbose = verbose
         return
         
     def get_program(self):
         program = Program()
         program.decls.append(self.get_decl())
-        while self.get_next_token():
+        while not self.is_next_token('T_EOF'):
             decl = self.get_decl()  
             program.decls.append(decl)
+        self.consume_token('T_EOF')
         return program
     
     def get_decl(self):
