@@ -492,7 +492,7 @@ class Parser:
     
     def get_expr_eq(self, ident = None):
         expr = self.get_expr_rel(ident)
-        while self.is_next_token(['T_Equal', 'T_NotEqual']):
+        if self.is_next_token(['T_Equal', 'T_NotEqual']):
             op = self.consume_token()
             right = self.get_expr_rel()
             expr = BinaryExpr('EqualityExpr', expr, op, right)
@@ -500,7 +500,7 @@ class Parser:
     
     def get_expr_rel(self, ident = None):
         expr = self.get_expr_add(ident)
-        while self.is_next_token(['<', 'T_LessEqual', '>', 'T_GreaterEqual']):
+        if self.is_next_token(['<', 'T_LessEqual', '>', 'T_GreaterEqual']):
             op = self.consume_token()
             right = self.get_expr_add() # no associativity
             expr = BinaryExpr('RelationalExpr', expr, op, right)
