@@ -39,8 +39,7 @@ class Program(ASTNode):
     def __init__(self):
         self.decls = []
     def print_tree(self):
-        print()
-        print('   Program: ')
+        print('\n   Program: ')
         for decl in self.decls:
             decl.print_tree(tablevel = 1)
         
@@ -91,7 +90,7 @@ class Stmt(ASTNode):
     def print_tree(self, tablevel = 0, prefix = ''):
         print('   {:}{:}Stmt: '.format(' '*3*tablevel, prefix))
             
-class StmtBlock(ASTNode):
+class StmtBlock(Stmt):
     def __init__(self):
         self.vardecls = []
         self.stmts = []
@@ -103,7 +102,7 @@ class StmtBlock(ASTNode):
         for stmt in self.stmts:
             stmt.print_tree(tablevel+1)
 
-class IfStmt(ASTNode):
+class IfStmt(Stmt):
     def __init__(self, test, stmt, elsestmt = None):
         self.test = test
         self.stmt = stmt
@@ -116,7 +115,7 @@ class IfStmt(ASTNode):
         if self.elsestmt != None:
             self.elsestmt.print_tree(tablevel+1, '(else) ')
 
-class WhileStmt(ASTNode):
+class WhileStmt(Stmt):
     def __init__(self, test, stmt):
         self.test = test
         self.stmt = stmt
@@ -126,7 +125,7 @@ class WhileStmt(ASTNode):
         self.test.print_tree(tablevel + 1, '(test) ')
         self.stmt.print_tree(tablevel + 1, '(body) ')
 
-class ForStmt(ASTNode):
+class ForStmt(Stmt):
     def __init__(self, test, stmt, init = None, step = None):
         self.init = init
         self.test = test
@@ -146,14 +145,14 @@ class ForStmt(ASTNode):
             print('   {:}(step) Empty: '.format(' '*3*(tablevel+1)))
         self.stmt.print_tree(tablevel+1, '(body) ')
 
-class BreakStmt(ASTNode):
+class BreakStmt(Stmt):
     def __init__(self, token):
         self.line = token.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}BreakStmt: '.format(self.line, ' '*3*tablevel, prefix))
 
-class ReturnStmt(ASTNode):
+class ReturnStmt(Stmt):
     def __init__(self, token, expr = None):
         self.line = token.line
         self.expr = expr
@@ -165,7 +164,7 @@ class ReturnStmt(ASTNode):
         else:
             print('   {:}Empty: '.format(' '*3*(tablevel+1)))
 
-class PrintStmt(ASTNode):
+class PrintStmt(Stmt):
     def __init__(self, token, exprs):
         self.line = token.line
         self.exprs = exprs
@@ -287,6 +286,14 @@ class Parser:
         self.textlines = text.split('\n')
         tokenlist = Scanner().scan(self.text)
         self.tokenlist = [Token(*item) for item in tokenlist]
+        # add an EOF token at the end to handle errors gracefully
+        eof_line, eof_start, eof_end = 1, 1, 1
+        if len(self.tokenlist) > 0:
+            # position the EOF immediately after the last token
+            last_token = self.tokenlist[-1]
+            eof_line, eof_start, eof_end = last_token.line, last_token.end+1, last_token.end+1
+        eof = Token('T_EOF', '', '', eof_line, eof_start, eof_end)
+        self.tokenlist.append(eof)
         self.pos = 0
         self.verbose = verbose
         return
