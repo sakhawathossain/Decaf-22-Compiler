@@ -468,87 +468,76 @@ class Parser:
         T       ::=  Constant | ident Q | (Eor) | ReadInteger() | ReadLine()
         Q       ::=  (Expr+,) | eps
         '''
-        
-        L = self.get_next_token()
-        if L.istype('T_Identifier'):
-            self.consume_token()
-            if self.get_next_token().istype('='):
-                # Expr ::= ident = Eor
-                op = self.consume_token()
-                return AssignExpr(IdentExpr(L), op, self.get_expr_or())               
-            else:
-                # Expr ::= Eor
-                return self.get_expr_or(L)
-        else:
+
+        if self.is_next_token('T_Identifier'):
+            if self.get_next_token(lookahead = 2).istype('='):
+                return self.get_expr_asgn()
             return self.get_expr_or()
+        return self.get_expr_or()
+    
+    def get_expr_asgn(self):
+        ident = self.consume_token('T_Identifier')
+        op = self.consume_token('=')
+        return AssignExpr(IdentExpr(ident), op, self.get_expr_or())
                 
-    def get_expr_or(self, ident = None):
-        expr = self.get_expr_and(ident)
+    def get_expr_or(self):
+        expr = self.get_expr_and()
         while self.is_next_token('T_Or'):
             op = self.consume_token()
             right = self.get_expr_and()
             expr = BinaryExpr('LogicalExpr', expr, op, right)
         return expr
         
-    def get_expr_and(self, ident = None):
-        expr = self.get_expr_eq(ident)
+    def get_expr_and(self):
+        expr = self.get_expr_eq()
         while self.is_next_token('T_And'):
             op = self.consume_token()
             right = self.get_expr_eq()
             expr = BinaryExpr('LogicalExpr', expr, op, right)
         return expr
     
-    def get_expr_eq(self, ident = None):
-        expr = self.get_expr_rel(ident)
+    def get_expr_eq(self):
+        expr = self.get_expr_rel()
         if self.is_next_token(['T_Equal', 'T_NotEqual']):
             op = self.consume_token()
             right = self.get_expr_rel()
             expr = BinaryExpr('EqualityExpr', expr, op, right)
         return expr
     
-    def get_expr_rel(self, ident = None):
-        expr = self.get_expr_add(ident)
+    def get_expr_rel(self):
+        expr = self.get_expr_add()
         if self.is_next_token(['<', 'T_LessEqual', '>', 'T_GreaterEqual']):
             op = self.consume_token()
             right = self.get_expr_add() # no associativity
             expr = BinaryExpr('RelationalExpr', expr, op, right)
         return expr
     
-    def get_expr_add(self, ident = None):
-        expr = self.get_expr_prod(ident)
+    def get_expr_add(self):
+        expr = self.get_expr_prod()
         while self.is_next_token(['+', '-']):
             op = self.consume_token()
             right = self.get_expr_prod()
             expr = BinaryExpr('ArithmeticExpr', expr, op, right)
         return expr
     
-    def get_expr_prod(self, ident = None):
-        expr = self.get_expr_unary(ident)
+    def get_expr_prod(self):
+        expr = self.get_expr_unary()
         while self.is_next_token(['*', '/', '%']):
             op = self.consume_token()
             right = self.get_expr_unary()
             expr = BinaryExpr('ArithmeticExpr', expr, op, right)
         return expr
     
-    def get_expr_unary(self, ident = None):
+    def get_expr_unary(self):
         while self.is_next_token(['-', '!']):
             op = self.consume_token()
             return UnaryExpr(op, self.get_expr_unary())
-        return self.get_terminal(ident)
+        return self.get_terminal()
     
-    def get_terminal(self, ident = None):
-        if ident != None:
-            if self.is_next_token('('):
-                self.consume_token('(')
-                expr = CallExpr(ident, self.get_actuals())
-                self.consume_token(')')
-                return expr
-            else:
-                return IdentExpr(ident)
+    def get_terminal(self):
         if self.is_next_token('T_Identifier'):
             ident = self.consume_token()
             if self.get_next_token().istype('('):
-                # ident (Actuals)
                 self.consume_token('(')
                 expr = CallExpr(ident, self.get_actuals())
                 self.consume_token(')')
@@ -597,14 +586,17 @@ class Parser:
             return self.get_next_token().name == name
         return any([self.get_next_token().name == n for n in name])
             
-    def get_next_token(self):
+    def get_next_token(self, lookahead = 1):
         """
         returns a reference to the next token object
         this does not consume the token
         """
-        if self.pos >= len(self.tokenlist):
+        # avoid unwanted behaviour
+        lookahead = 1 if lookahead < 1 else lookahead
+        pos = self.pos + lookahead - 1
+        if pos >= len(self.tokenlist):
             return None
-        return self.tokenlist[self.pos]
+        return self.tokenlist[pos]
     
     def consume_token(self, name = None):
         """
