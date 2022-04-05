@@ -256,6 +256,13 @@ class ConstantExpr(Expr):
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}{:}: {:}'.format(self.line, ' '*3*tablevel, prefix,
                                            self.token.name[2:], self.printval))
+        
+class Null(Expr):
+    def __init__(self, token):
+        self.line = token.line
+        
+    def print_tree(self, tablevel = 0, prefix = ''):
+        print('{:>3}{:}{:}Null: '.format(self.line, ' '*3*tablevel, prefix))
 
 class ReadIntegerExpr(Expr):
     def __init__(self, token):
@@ -538,8 +545,10 @@ class Parser:
             else:
                 return IdentExpr(ident)
         elif self.is_next_token(['T_IntConstant', 'T_DoubleConstant', 
-                                 'T_StringConstant', 'T_BoolConstant', 'T_Null']):
+                                 'T_StringConstant', 'T_BoolConstant']):
             return ConstantExpr(self.consume_token())
+        elif self.is_next_token('T_Null'):
+            return Null(self.consume_token())
         elif self.is_next_token('('):
             self.consume_token('(')
             expr = self.get_expr_or()
