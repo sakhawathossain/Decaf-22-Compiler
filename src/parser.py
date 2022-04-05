@@ -205,7 +205,7 @@ class CallExpr(Expr):
             actual.print_tree(tablevel+1, '(actuals) ')
 
 class BinaryExpr(Expr):
-    def __init__(self, exprname, L = None, op = None, R = None):
+    def __init__(self, exprname, L, op, R):
         self.exprname = exprname
         self.L = L
         self.op = op
@@ -256,13 +256,6 @@ class ConstantExpr(Expr):
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}{:}: {:}'.format(self.line, ' '*3*tablevel, prefix,
                                            self.token.name[2:], self.printval))
-        
-class Null(Expr):
-    def __init__(self, token):
-        self.line = token.line
-        
-    def print_tree(self, tablevel = 0, prefix = ''):
-        print('{:>3}{:}{:}Null: '.format(self.line, ' '*3*tablevel, prefix))
 
 class ReadIntegerExpr(Expr):
     def __init__(self, token):
@@ -460,13 +453,13 @@ class Parser:
         Expr    ::=  ident = Eor | Eor
         Eor     ::=  End || Eor | End
         End     ::=  Eeq && End | Eeq
-        Eeq     ::=  Ere (==, !=) Eeq | Ere ### Check with prof. if associative
+        Eeq     ::=  Ere (==, !=) Ere | Ere
         Ere     ::=  Ead (<, <=, >, >=) Ead | Ead
         Ead     ::=  Epr (+, -) Ead | Epr
         Epr     ::=  Eun (*, /, %) Epr | Eun
         Eun     ::=  (!, -) Eun | T
-        T       ::=  Constant | ident Q | (Eor) | ReadInteger() | ReadLine()
-        Q       ::=  (Expr+,) | eps
+        T       ::=  Constant | ident (Actuals) | (Eor) | ReadInteger() | ReadLine()
+        Actuals       ::=  Expr+, | eps
         '''
 
         if self.is_next_token('T_Identifier'):
@@ -545,10 +538,8 @@ class Parser:
             else:
                 return IdentExpr(ident)
         elif self.is_next_token(['T_IntConstant', 'T_DoubleConstant', 
-                                 'T_StringConstant', 'T_BoolConstant']):
+                                 'T_StringConstant', 'T_BoolConstant', 'T_Null']):
             return ConstantExpr(self.consume_token())
-        elif self.is_next_token('T_Null'):
-            return Null(self.consume_token())
         elif self.is_next_token('('):
             self.consume_token('(')
             expr = self.get_expr_or()
