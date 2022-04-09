@@ -80,6 +80,7 @@ class FunctionDecl(ASTNode):
         
 class Type(ASTNode):
     def __init__(self, token):
+        self.token = token
         self.typeval = token.lexeme
         self.line = token.line
         
@@ -147,6 +148,7 @@ class ForStmt(Stmt):
 
 class BreakStmt(Stmt):
     def __init__(self, token):
+        self.token = token
         self.line = token.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
@@ -154,6 +156,7 @@ class BreakStmt(Stmt):
 
 class ReturnStmt(Stmt):
     def __init__(self, token, expr = None):
+        self.token = token
         self.line = token.line
         self.expr = expr
         
@@ -166,6 +169,7 @@ class ReturnStmt(Stmt):
 
 class PrintStmt(Stmt):
     def __init__(self, token, exprs):
+        self.token = token
         self.line = token.line
         self.exprs = exprs
         
