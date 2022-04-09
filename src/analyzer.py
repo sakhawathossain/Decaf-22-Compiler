@@ -29,13 +29,13 @@ class SymbolTable():
         
     def install(self, decl):
         # TODO: check if declaration already exists
-        ident = decl.ident
+        ident = decl.ident.lexeme
         if isinstance(decl, VariableDecl):
             self.entries[ident] = self.VarEntry(decl.type_)
         else:
             pass
             self.entries[ident] = self.FuncEntry(decl.type_,
-                                                 [vardecl.type_ for vardecl in decl.formals])
+                                                 [vardecl.type_.typeval for vardecl in decl.formals])
             
     def lookup(self, ident):
         symbol_table = self
@@ -49,12 +49,12 @@ class SymbolTable():
     def printself(self):
         print('>> SymbolTable [level {}]'.format(self.level))
         for k, v in self.entries.items():
-            if isinstance(v, VarEntry):
-                print('(Var)  {0}\t type: {1}'.format(k, v.type_))
+            if isinstance(v, self.VarEntry):
+                print('(Var)  {0}\t type: {1}'.format(k, v.type_.typeval))
             else:
                 print('(Func) {0}\t type: {1}, sig: {2}'.format(
                     k,
-                    v.return_type,
+                    v.return_type.typeval,
                     ', '.join(v.formal_types)))
     
 class SymbolTableConstructor():
@@ -67,6 +67,7 @@ class SymbolTableConstructor():
         # first pass
         for decl in self.program.decls:
             self.program.symbol_table.install(decl)
+        #self.program.symbol_table.printself()
         # second pass
         for decl in self.program.decls:
             if isinstance(decl, FunctionDecl):
@@ -77,6 +78,7 @@ class SymbolTableConstructor():
         decl.symbol_table = symbol_table
         for vardecl in decl.formals:
             symbol_table.install(vardecl)
+        #symbol_table.printself()
         self.visit_stmtblock(decl.stmtblock, symbol_table)
         
     def visit_stmtblock(self, stmt, parent_st):
@@ -89,9 +91,10 @@ class SymbolTableConstructor():
             if isinstance(stmt, IfStmt):
                 self.visit_stmtblock(stmt.stmt, symbol_table)
                 if stmt.elsestmt != None:
-                    self.visit_stmtblock(stmt.elsestmt)
+                    self.visit_stmtblock(stmt.elsestmt, symbol_table)
             elif isinstance(stmt, WhileStmt) or isinstance(stmt, ForStmt):
-                self.visit_stmtblock(stmt.stmt, parent_st)       
+                self.visit_stmtblock(stmt.stmt, symbol_table)  
+        #symbol_table.printself()
         
         
 class SyntaxAnalyzer():
