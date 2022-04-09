@@ -466,7 +466,7 @@ class Parser:
         Epr     ::=  Eun (*, /, %) Epr | Eun
         Eun     ::=  (!, -) Eun | T
         T       ::=  Constant | ident (Actuals) | (Eor) | ReadInteger() | ReadLine()
-        Actuals       ::=  Expr+, | eps
+        Actuals ::=  Expr+, | eps
         '''
 
         if self.is_next_token('T_Identifier'):
@@ -500,7 +500,7 @@ class Parser:
         expr = self.get_expr_rel()
         if self.is_next_token(['T_Equal', 'T_NotEqual']):
             op = self.consume_token()
-            right = self.get_expr_rel()
+            right = self.get_expr_rel() # no associativity
             expr = BinaryExpr('EqualityExpr', expr, op, right)
         return expr
     
