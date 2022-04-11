@@ -52,28 +52,30 @@ class VariableDecl(ASTNode):
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}VarDecl: '.format(self.line, ' '*3*tablevel, prefix))
         self.type_.print_tree(tablevel+1)
-        print('{:>3}{:}Identifier: {:}'.format(self.ident.line,
+        print('{:>3}{:}Identifier: {:}'.format(self.token.line,
                                                ' '*3*(tablevel+1),
-                                               self.ident.lexeme))
+                                               self.ident))
 
 class Variable():
     def __init__(self, type_, ident):
         self.type_ = type_
         self.line = type_.line
-        self.ident = ident
+        self.ident = ident.lexeme
+        self.token = ident
     
 class FunctionDecl(ASTNode):
     def __init__(self, type_, ident, formals, stmtblock):
         self.type_ = type_
         self.line = type_.line
-        self.ident = ident
+        self.token = ident
+        self.ident = ident.lexeme
         self.formals = formals
         self.stmtblock = stmtblock
         
     def print_tree(self, tablevel = 0):
         print('{:>3}{:}FnDecl: '.format(self.type_.line, ' '*3*tablevel))
         self.type_.print_tree(tablevel+1, '(return type) ')
-        print('{:>3}{:}Identifier: {:}'.format(self.ident.line, ' '*3*(tablevel+1), self.ident.lexeme))
+        print('{:>3}{:}Identifier: {:}'.format(self.token.line, ' '*3*(tablevel+1), self.ident))
         for vardecl in self.formals:
             vardecl.print_tree(tablevel + 1, '(formals) ')
         self.stmtblock.print_tree(tablevel + 1, '(body) ')
@@ -197,14 +199,15 @@ class AssignExpr(Expr):
 
 class CallExpr(Expr):
     def __init__(self, ident = None, actuals = []):
-        self.ident = ident
+        self.token = ident
+        self.ident = self.token.lexeme
         self.actuals = actuals
-        self.line = self.ident.line
+        self.line = self.token.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}Call: '.format(self.line, ' '*3*tablevel, prefix))
         print('{:>3}{:}Identifier: {:}'.format(self.line, ' '*3*(tablevel+1),
-                                               self.ident.lexeme))
+                                               self.ident))
         for actual in self.actuals:
             actual.print_tree(tablevel+1, '(actuals) ')
 
@@ -241,11 +244,12 @@ class UnaryExpr(Expr):
 class IdentExpr(Expr):
     def __init__(self, token):
         self.token = token
+        self.ident = token.lexeme
         self.line = token.line
         
     def print_tree(self, tablevel = 0, prefix = ''):
         print('{:>3}{:}{:}FieldAccess: '.format(self.line, ' '*3*tablevel, prefix))
-        print('{:>3}{:}Identifier: {:}'.format(self.line, ' '*3*(tablevel+1), self.token.lexeme))
+        print('{:>3}{:}Identifier: {:}'.format(self.line, ' '*3*(tablevel+1), self.ident))
 
 class ConstantExpr(Expr):
     def __init__(self, token):
