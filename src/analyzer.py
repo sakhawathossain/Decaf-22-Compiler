@@ -6,7 +6,38 @@ Created on Thu Apr  7 21:22:45 2022
 @author: shsaimon
 """
 
-from parser import *
+# TODO: return type checking
+import sys
+
+from parser import Span
+from parser import Token
+from parser import ParseError
+
+from parser import ASTNode
+from parser import Program
+from parser import VariableDecl
+from parser import Variable
+from parser import FunctionDecl
+from parser import Type
+from parser import Stmt
+from parser import StmtBlock
+from parser import IfStmt
+from parser import WhileStmt
+from parser import ForStmt
+from parser import BreakStmt
+from parser import ReturnStmt
+from parser import PrintStmt
+from parser import Expr
+from parser import AssignExpr
+from parser import CallExpr
+from parser import BinaryExpr
+from parser import UnaryExpr
+from parser import IdentExpr
+from parser import ConstantExpr
+from parser import Null
+from parser import ReadIntegerExpr
+from parser import ReadLineExpr
+from parser import Parser
 
 class SymbolTable():
     
@@ -15,58 +46,49 @@ class SymbolTable():
             self.ident = ident
             self.type_ = type_
             
-        def __str__(self):
-            return '[SymbolTable Entry] {0:<6} {1}'.format(self.type_, self.ident)
-            
     class FuncEntry():
         def __init__(self, ident, type_, formal_types = []):
             self.ident = ident
             self.type_ = type_
             self.formal_types = formal_types
-            
-        def __str__(self):
-            return '[SymbolTable Entry] {0:<6} {1:<10}'.format(self.type_, self.ident, ', '.join(self.formal_types))
-    
-    def __init__(self, parent = None, association = ''):
-        if parent == None:
-            self.level = 0
-        else:
+   
+    def __init__(self, parent = None):
+        self.func = None
+        self.level = 0
+        if parent != None:
             self.level = parent.level + 1
+            self.func = parent.func            
         self.parent = parent
-        self.association = association
         self.entries = {}
         
     def install(self, ident, type_, formals = None):
         # TODO: check if declaration already exists
-        #print('installing', ident)
         if formals == None:
             self.entries[ident] = self.VarEntry(ident, type_)
         else:
             self.entries[ident] = self.FuncEntry(ident, type_, formals)
             
     def lookup(self, ident):
+        #print('looking for', ident)
         symbol_table = self
         while symbol_table != None:
+            #symbol_table.print_self()
             if ident in symbol_table.entries:
                 return symbol_table.entries[ident]
             # move up one level
             symbol_table = symbol_table.parent
         return None
     
-    def printself(self):
-        print('[SymbolTable level {}] {}'.format(self.level, self.association))
-        for k, v in self.entries.items():
-            if isinstance(v, self.VarEntry):
-                print('\t(Var)  {0}\t type: {1}'.format(k, v.type_))
-            else:
-                print('\t(Func) {0}\t type: {1}, sig: {2}'.format(
-                    k, v.type_, ', '.join(v.formal_types)))
+    def print_self(self):
+        print('SymbolTable >>')
+        print('\n'.join([entry + ': ' + self.entries[entry].type_ for entry in self.entries]))
+        print()
     
 class SymbolTableConstructor():
     
     def __init__(self, program):
         self.program = program
-        self.program.symbol_table = SymbolTable(None, 'program')
+        self.program.symbol_table = SymbolTable()
         
     def visit_program(self):
         # first pass
@@ -77,146 +99,181 @@ class SymbolTableConstructor():
                 self.program.symbol_table.install(decl.ident,
                                                   decl.type_.typeval,
                                                   [vardecl.type_.typeval for vardecl in decl.formals])
-        #self.program.symbol_table.printself()
         # second pass
         for decl in self.program.decls:
             if isinstance(decl, FunctionDecl):
                 self.visit_function_decl(decl)
                 
     def visit_function_decl(self, decl):
-        symbol_table = SymbolTable(self.program.symbol_table)
+        symbol_table = SymbolTable(parent = self.program.symbol_table)
+        # save the current function name for analyzer visit to Return stmts
+        symbol_table.func = decl.ident
+        # attach symbol table to decl ASTNode
         decl.symbol_table = symbol_table
         for vardecl in decl.formals:
             symbol_table.install(vardecl.ident, vardecl.type_.typeval)
-        #symbol_table.printself()
         self.visit_stmtblock(decl.stmtblock, symbol_table)
         
-    def visit_stmtblock(self, stmt, parent_st):
-        if not isinstance(stmt, StmtBlock):
+    def visit_stmtblock(self, stmtblock, parent_st):
+        if not isinstance(stmtblock, StmtBlock):
             return
         symbol_table = SymbolTable(parent = parent_st)
-        stmt.symbol_table = symbol_table
-        for decl in stmt.vardecls:
+        stmtblock.symbol_table = symbol_table
+        for decl in stmtblock.vardecls:
             symbol_table.install(decl.ident, decl.type_.typeval)
-        #symbol_table.printself()
-        for stmt in stmt.stmts:
+        for stmt in stmtblock.stmts:
             if isinstance(stmt, IfStmt):
                 self.visit_stmtblock(stmt.stmt, symbol_table)
                 if stmt.elsestmt != None:
                     self.visit_stmtblock(stmt.elsestmt, symbol_table)
             elif isinstance(stmt, WhileStmt) or isinstance(stmt, ForStmt):
-                self.visit_stmtblock(stmt.stmt, symbol_table)  
+                self.visit_stmtblock(stmt.stmt, symbol_table)
+            elif isinstance(stmt, StmtBlock):
+                self.visit_stmtblock(stmt, symbol_table)
         
 class SemanticChecker():
-    
-    class ErrorType():
-        pass
     
     def __init__(self, program, errorfunc):
         self.program = program
         self.errorfunc = errorfunc
         self.loop_level = 0
         
-    def print_error(self, token, message):
-        self.errorfunc(token, message)
+    def print_error(self, span, message):
+        self.errorfunc(span, message)
         
     def visit(self):
+        self.symbol_table = self.program.symbol_table
         for decl in self.program.decls:
             if isinstance(decl, FunctionDecl):
+                self.symbol_table = decl.symbol_table
                 self.visit_stmt(decl.stmtblock)
             
     def visit_stmt(self, stmt):
         if stmt == None:
             return
-        if isinstance(stmt, Expr):
-            self.visit_expr(stmt)
         elif isinstance(stmt, IfStmt):
             self.visit_expr(stmt.test)
+            if not stmt.test.type_ in ['bool', 'Error']:
+                self.print_error(stmt.test.span, 'Test expression must have boolean type')
             self.visit_stmt(stmt.stmt)
             self.visit_stmt(stmt.elsestmt)
         elif isinstance(stmt, WhileStmt):
             self.loop_level += 1
             self.visit_expr(stmt.test)
+            if not stmt.test.type_ in ['bool', 'Error']:
+                self.print_error(stmt.test.span, 'Test expression must have boolean type')
             self.visit_stmt(stmt.stmt)
             self.loop_level -= 1
         elif isinstance(stmt, ForStmt):
             self.loop_level += 1
             self.visit_expr(stmt.init)
             self.visit_expr(stmt.test)
+            if not stmt.test.type_ in ['bool', 'Error']:
+                self.print_error(stmt.test.span, 'Test expression must have boolean type')
             self.visit_expr(stmt.step)
             self.visit_stmt(stmt.stmt)
             self.loop_level -= 1
         elif isinstance(stmt, BreakStmt):
             if self.loop_level <= 0:
-                self.print_error(stmt.token, 'break is only allowed inside a loop')
+                self.print_error(stmt.span, 'break is only allowed inside a loop')
         elif isinstance(stmt, ReturnStmt):
             self.visit_expr(stmt.expr)
+            entry = self.program.symbol_table.lookup(self.symbol_table.func)
+            assert entry != None
+            return_expr_type = 'void' if stmt.expr == None else stmt.expr.type_
+            if entry.type_ != return_expr_type and \
+                not (entry.type_ == 'Error' or return_expr_type == 'Error'):
+                    span = stmt.span if stmt.expr == None else stmt.expr.span
+                    self.print_error(span,
+                                     'Incompatible return: {0} given, {1} expected'.format(
+                                         return_expr_type, entry.type_))
+        elif isinstance(stmt, PrintStmt):
+            for i, expr in enumerate(stmt.exprs):
+                self.visit_expr(expr)
+                if expr.type_ not in ['int', 'bool', 'string', 'Error']:
+                    self.print_error(expr.span,
+                                     'Incompatible argument {0}: {1} given, int/bool/string expected'.format(
+                                         i+1, expr.type_))
         elif isinstance(stmt, StmtBlock):
             self.symbol_table = stmt.symbol_table
             for s in stmt.stmts:
                 self.visit_stmt(s)
+            self.symbol_table = self.symbol_table.parent
+        elif isinstance(stmt, Expr):
+            self.visit_expr(stmt)
             
     def visit_expr(self, expr, enforce_type = None):
         if expr == None:
             return
         if isinstance(expr, AssignExpr) or isinstance(expr, BinaryExpr):
-            # TODO:
             self.visit_expr(expr.L)
             self.visit_expr(expr.R)
             is_compat, resulting_type = self.is_compatible(expr.R, expr.op, expr.L)
             if not is_compat:
-                self.errorfunc(expr.op, 'Incompatible operands: {0} {1} {2}'.format(
-                    expr.L.type_, expr.op.lexeme, expr.R.type_))
+                self.print_error(expr.op.span, 'Incompatible operands: {0} {1} {2}'.format(
+                                     expr.L.type_, expr.op.lexeme, expr.R.type_))
+            # TODO: double check with professor if assign-and-evaluate should be allowed
             expr.type_ = resulting_type
-            expr.start = expr.L.start
-            expr.end = expr.R.end
         elif isinstance(expr, UnaryExpr):
             # TODO:
             self.visit_expr(expr.R)
             is_compat, resulting_type = self.is_compatible(expr.R, expr.op)
             if not is_compat:
-                self.errorfunc(expr.op, 'Incompatible operands: {0} {1}'.format(
-                    expr.op.lexeme, expr.R.type_))
+                #lstart, lend, colstart, colend = expr.op.line, expr.op.line, expr.op.start, expr.op.end
+                self.errorfunc(expr.op.span,
+                               'Incompatible operand: {0} {1}'.format(
+                                   expr.op.lexeme, expr.R.type_))
             expr.type_ = resulting_type
-            expr.start = expr.op.start
-            expr.end = expr.R.end
         elif isinstance(expr, IdentExpr):
             ident = expr.ident
             entry = self.symbol_table.lookup(ident)
-            if entry == None:
-                self.print_error(expr.token, "No declaration for Variable '{0}' found".format(ident))
+            if entry == None or isinstance(entry, SymbolTable.FuncEntry):
+                #lstart, lend, colstart, colend = expr.token.line, expr.token.line, expr.token.start, expr.token.end
+                self.print_error(expr.span,
+                                 "No declaration found for variable '{0}'".format(ident))
                 # TODO: decide whether to add this to global or immediate symbol table
                 self.symbol_table.install(ident, 'Error')
                 expr.type_ = 'Error'
             else:
                 expr.type_ = entry.type_
-            expr.start = expr.token.start
-            expr.end = expr.token.end
         elif isinstance(expr, ConstantExpr):
-            # remove 'T_' and 'Constant' from the token type
             expr.type_ = expr.token.name.lower()[2:-8]
-            expr.start = expr.token.start
-            expr.end = expr.token.end
+        elif isinstance(expr, ReadIntegerExpr):
+            expr.type_ = 'int'
+        elif isinstance(expr, ReadLineExpr):
+            expr.type_ = 'string'
         elif isinstance(expr, CallExpr):
             # TODO:
             ident = expr.ident
             entry = self.symbol_table.lookup(ident)
             if entry == None:
-                self.print_error(expr.token, "No declaration for Function '{0}' found".format(ident))
+                self.print_error(expr.token.span,
+                                 "No declaration found for function '{0}'".format(ident))
                 # TODO: decide whether to add this to global or immediate symbol table
                 self.symbol_table.install(ident, 'Error', [])
                 expr.type_ = 'Error'
                 return
             if len(entry.formal_types) != len(expr.actuals):
-                self.print_error(expr.token, "Function {0} expects {1} arguments but {2} were given"
-                                 .format(ident, len(entry.formal_types), len(expr.actuals)))
+                self.print_error(expr.token.span,
+                                 "Function '{0}' expects {1} arguments but {2} given".format(
+                                     ident, len(entry.formal_types), len(expr.actuals)))
                 expr.type_ = 'Error'
-                
+                return
+            for i, pair in enumerate(zip(entry.formal_types, expr.actuals)):
+                formal, actual = pair
+                self.visit_expr(actual)
+                if formal != actual.type_:
+                    self.print_error(actual.span,
+                                     "Incompatible argument {0}: {1} given, {2} expected".format(
+                                         i+1, actual.type_, formal))
+                    expr.type_ = 'Error'
+                    # TODO: check with professor if type checking for the other actuals should be skipped
+                    return
+            expr.type_ = entry.type_
+
         
     def is_compatible(self, R, optoken, L = None):
-        # print('here')
         op = optoken.lexeme
-        # print('op', op)
         if L == None:
             if op == '!' and R.type_ in ['bool', 'Error']:
                 return True, R.type_
@@ -244,27 +301,19 @@ class SemanticChecker():
             resulting_type = L.type_
         return compatible, resulting_type
         
-    
-        
-        
 class SyntaxAnalyzer():
     
     def __init__(self, text, verbose = False):
         self.text = text
         self.textlines = text.split('\n')
         self.verbose = verbose
-        self.ast = Parser(text, verbose = False).parse()
-        
-    def print_error(self, token, message):
-        print('\n*** Error line {:}.'.format(token.line))
-        print(self.textlines[token.line-1])
-        print(' '* (token.start - 1) + '^' * (token.end - token.start + 1))
-        print('*** {0}\n'.format(message))
+        self.parser = Parser(text, verbose = False)
+        self.ast = self.parser.parse()
         
     def analyze(self):
         if self.ast != None:
             SymbolTableConstructor(self.ast).visit_program()
-            SemanticChecker(self.ast, self.print_error).visit()
+            SemanticChecker(self.ast, self.parser.print_error).visit()
             
             
 
