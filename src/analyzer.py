@@ -69,10 +69,8 @@ class SymbolTable():
             self.entries[ident] = self.FuncEntry(ident, type_, formals)
             
     def lookup(self, ident):
-        #print('looking for', ident)
         symbol_table = self
         while symbol_table != None:
-            #symbol_table.print_self()
             if ident in symbol_table.entries:
                 return symbol_table.entries[ident]
             # move up one level
@@ -250,26 +248,28 @@ class SemanticChecker():
                 self.print_error(expr.token.span,
                                  "No declaration found for function '{0}'".format(ident))
                 # TODO: decide whether to add this to global or immediate symbol table
-                self.symbol_table.install(ident, 'Error', [])
+                self.program.symbol_table.install(ident, 'Error', [])
                 expr.type_ = 'Error'
-                return
-            if len(entry.formal_types) != len(expr.actuals):
-                self.print_error(expr.token.span,
-                                 "Function '{0}' expects {1} arguments but {2} given".format(
-                                     ident, len(entry.formal_types), len(expr.actuals)))
+            elif len(entry.formal_types) != len(expr.actuals):
+                for actual in expr.actuals:
+                    self.visit_expr(actual)
+                if entry.type_ != 'Error':
+                    self.print_error(expr.token.span,
+                                     "Function '{0}' expects {1} arguments but {2} given".format(
+                                         ident, len(entry.formal_types), len(expr.actuals)))
                 expr.type_ = 'Error'
-                return
-            for i, pair in enumerate(zip(entry.formal_types, expr.actuals)):
-                formal, actual = pair
-                self.visit_expr(actual)
-                if formal != actual.type_:
-                    self.print_error(actual.span,
-                                     "Incompatible argument {0}: {1} given, {2} expected".format(
-                                         i+1, actual.type_, formal))
-                    expr.type_ = 'Error'
-                    # TODO: check with professor if type checking for the other actuals should be skipped
-                    return
-            expr.type_ = entry.type_
+
+            else:
+                for i, pair in enumerate(zip(entry.formal_types, expr.actuals)):
+                    formal, actual = pair
+                    self.visit_expr(actual)
+                    if formal != actual.type_:
+                        self.print_error(actual.span,
+                                         "Incompatible argument {0}: {1} given, {2} expected".format(
+                                             i+1, actual.type_, formal))
+                        expr.type_ = 'Error'
+                        # TODO: check with professor if type checking for the other actuals should be skipped
+                expr.type_ = entry.type_
 
         
     def is_compatible(self, R, optoken, L = None):
