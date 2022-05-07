@@ -34,7 +34,6 @@ from parser import BinaryExpr
 from parser import UnaryExpr
 from parser import IdentExpr
 from parser import ConstantExpr
-from parser import Null
 from parser import ReadIntegerExpr
 from parser import ReadLineExpr
 from parser import Parser
@@ -135,16 +134,20 @@ class SemanticChecker():
         self.program = program
         self.errorfunc = errorfunc
         self.loop_level = 0
+        self.is_syntax_correct = True
         
     def print_error(self, span, message):
+        self.is_syntax_correct = False
         self.errorfunc(span, message)
         
     def visit(self):
+        # top level symbol table
         self.symbol_table = self.program.symbol_table
         for decl in self.program.decls:
             if isinstance(decl, FunctionDecl):
                 self.symbol_table = decl.symbol_table
                 self.visit_stmt(decl.stmtblock)
+        return self.is_syntax_correct
             
     def visit_stmt(self, stmt):
         if stmt == None:
@@ -200,7 +203,7 @@ class SemanticChecker():
         elif isinstance(stmt, Expr):
             self.visit_expr(stmt)
             
-    def visit_expr(self, expr, enforce_type = None):
+    def visit_expr(self, expr):
         if expr == None:
             return
         if isinstance(expr, AssignExpr) or isinstance(expr, BinaryExpr):
@@ -217,7 +220,6 @@ class SemanticChecker():
             self.visit_expr(expr.R)
             is_compat, resulting_type = self.is_compatible(expr.R, expr.op)
             if not is_compat:
-                #lstart, lend, colstart, colend = expr.op.line, expr.op.line, expr.op.start, expr.op.end
                 self.errorfunc(expr.op.span,
                                'Incompatible operand: {0} {1}'.format(
                                    expr.op.lexeme, expr.R.type_))
@@ -226,11 +228,11 @@ class SemanticChecker():
             ident = expr.ident
             entry = self.symbol_table.lookup(ident)
             if entry == None or isinstance(entry, SymbolTable.FuncEntry):
-                #lstart, lend, colstart, colend = expr.token.line, expr.token.line, expr.token.start, expr.token.end
                 self.print_error(expr.span,
                                  "No declaration found for variable '{0}'".format(ident))
                 # TODO: decide whether to add this to global or immediate symbol table
-                self.symbol_table.install(ident, 'Error')
+                # current behaviour: add to global symbol table so all errors regarding this variable are suppressed
+                self.program.symbol_table.install(ident, 'Error')
                 expr.type_ = 'Error'
             else:
                 expr.type_ = entry.type_
@@ -241,13 +243,11 @@ class SemanticChecker():
         elif isinstance(expr, ReadLineExpr):
             expr.type_ = 'string'
         elif isinstance(expr, CallExpr):
-            # TODO:
             ident = expr.ident
             entry = self.symbol_table.lookup(ident)
             if entry == None:
                 self.print_error(expr.token.span,
                                  "No declaration found for function '{0}'".format(ident))
-                # TODO: decide whether to add this to global or immediate symbol table
                 self.program.symbol_table.install(ident, 'Error', [])
                 expr.type_ = 'Error'
             elif len(entry.formal_types) != len(expr.actuals):
@@ -300,6 +300,20 @@ class SemanticChecker():
             compatible = L.type_ == R.type_
             resulting_type = L.type_
         return compatible, resulting_type
+    
+    
+class Linker():
+    """Check if Main exists"""
+    
+    def __init__(self, program):
+        self.program = program
+        
+    def link(self):
+        if self.program.symbol_table.lookup('main') == None:
+            print('\n*** Error.')
+            print("*** Linker: function 'main' not defined\n")
+            return False
+        return True
         
 class SyntaxAnalyzer():
     
@@ -313,7 +327,12 @@ class SyntaxAnalyzer():
     def analyze(self):
         if self.ast != None:
             SymbolTableConstructor(self.ast).visit_program()
-            SemanticChecker(self.ast, self.parser.print_error).visit()
+            is_correct =  SemanticChecker(self.ast, self.parser.print_error).visit()
+            if is_correct:
+                has_main = Linker(self.ast).link()
+                if has_main:  
+                    return self.ast
+            return None
             
             
 
