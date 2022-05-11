@@ -273,6 +273,8 @@ class IdentExpr(Expr):
 class ConstantExpr(Expr):
     def __init__(self, token):
         self.token = token
+        self.const_type = token.name[2:-8].lower()
+        self.value = token.value
         self.span = token.span
         self.printval = token.value
         if self.token.name == 'T_StringConstant':
