@@ -11,13 +11,8 @@ import sys
 from analyzer import SyntaxAnalyzer
 from analyzer import SymbolTable
 
-from parser import ASTNode
-from parser import Program
 from parser import VariableDecl
-from parser import Variable
 from parser import FunctionDecl
-from parser import Type
-from parser import Stmt
 from parser import StmtBlock
 from parser import IfStmt
 from parser import WhileStmt
@@ -35,7 +30,6 @@ from parser import ConstantExpr
 from parser import ReadIntegerExpr
 from parser import ReadLineExpr
 from parser import Null
-from parser import Parser
 
 
 class Register:
@@ -45,7 +39,8 @@ class Register:
         
 class MIPSArch:
     
-    def __init__(self):
+    def __init__(self, emitfunc):
+        self.emit = emitfunc
         self.registers = {}
         self.op_binary = {'+': 'add',
                           '-': 'sub',
@@ -116,21 +111,31 @@ class MIPSArch:
         """
         return self.op_unary[op]
     
-    def stack_setup(self, emitfunc):
-        emitfunc('subu $sp, $sp, 8', 'decrement sp to make space to save ra, fp')
-        emitfunc('sw $fp, 8($sp)', 'save fp')
-        emitfunc('sw $ra, 4($sp)', 'save ra')
-        emitfunc('addiu $fp, $sp, 8', 'set up new fp')
+    def stack_setup(self):
+        self.emit('subu $sp, $sp, 8', 'decrement sp to make space to save ra, fp')
+        self.emit('sw $fp, 8($sp)', 'save fp')
+        self.emit('sw $ra, 4($sp)', 'save ra')
+        self.emit('addiu $fp, $sp, 8', 'set up new fp')
         
-    def stack_teardown(self, emitfunc):
-        emitfunc('move $sp, $fp', 'pop callee frame off stack')
-        emitfunc('lw $ra, -4($fp)', 'restore saved ra')
-        emitfunc('lw $fp, 0($fp)', 'restore saved fp')
-        emitfunc('jr $ra', 'return from function')
+    def stack_teardown(self):
+        self.emit('move $sp, $fp', 'pop callee frame off stack')
+        self.emit('lw $ra, -4($fp)', 'restore saved ra')
+        self.emit('lw $fp, 0($fp)', 'restore saved fp')
+        self.emit('jr $ra', 'return from function')
         
-    def grow_stack(self, emitfunc, size, comment):
-        emitfunc('subu $sp, $sp, {0}'.format(size),
+    def stack_grow(self, size, comment):
+        self.emit('subu $sp, $sp, {0}'.format(size),
                  comment)
+    
+    def stack_shrink(self, size, comment):
+        self.emit('add $sp, $sp, {0}'.format(size),
+                  'increase sp to remove space registers')
+        
+    def emit_jump_if_false(self, reg, label):
+        self.emit('blez {0}, {1}'.format(reg, label))
+        
+    def emit_jump(self, label):
+        self.emit('b {0}'.format(label))
             
 class Label:
     """
@@ -163,7 +168,7 @@ class Generator:
         self.textlines = text.split('\n')
         self.analyzer = SyntaxAnalyzer(text, verbose = False)
         self.ast = self.analyzer.analyze()
-        self.machine = MIPSArch()
+        self.machine = MIPSArch(self.emit)
         self.instructions = []
         
     def emit(self, ins = None, comment = None):
@@ -191,11 +196,15 @@ class Generator:
         self.write()
         
     def visit_program(self):
+        nglobals = 0
         for decl in self.ast.decls:
             if isinstance(decl, VariableDecl):
-                # TODO: impl global variables
-                pass
-            else:
+                entry = self.symbol_table.lookup(decl.ident)
+                # assume global memory starts at 0($gp) and goes up, e.g. 4($gp), 8($gp)
+                entry.memloc = '{0}($gp)'.format(nglobals*4)
+                nglobals += 1
+        for decl in self.ast.decls:
+            if isinstance(decl, FunctionDecl):
                 self.visit_function_decl(decl)
                 
     
@@ -207,21 +216,15 @@ class Generator:
         self.emit(comment = 'BeginFunc')
         
         self.stacksize = self.assign_local_memory(function_decl)
-        self.emit('subu $sp, $sp, 8', 'decrement sp to make space to save ra, fp')
-        self.emit('sw $fp, 8($sp)', 'save fp')
-        self.emit('sw $ra, 4($sp)', 'save ra')
-        self.emit('addiu $fp, $sp, 8', 'set up new fp')
-        self.emit('subu $sp, $sp, {0}'.format(self.stacksize),
-                  'decrement sp to make space for locals/temps')
+        self.machine.stack_setup()
+        self.machine.stack_grow(self.stacksize,
+                                'decrement sp to make space for locals/temps')
         
         self.visit_stmt_block(function_decl.stmtblock)
         # handle implicit return
         self.emit(comment = 'EndFunc')
         self.emit(comment = '(below handles reaching end of fn body with no explicit return)')
-        self.emit('move $sp, $fp', 'pop callee frame off stack')
-        self.emit('lw $ra, -4($fp)', 'restore saved ra')
-        self.emit('lw $fp, 0($fp)', 'restore saved fp')
-        self.emit('jr $ra', 'return from function')
+        self.machine.stack_teardown()
        
     def assign_local_memory(self, function_decl):
         stacksize = 0
@@ -234,7 +237,7 @@ class Generator:
                 entry = stmtblock.symbol_table.lookup(var.ident)
                 if isinstance(entry, SymbolTable.VarEntry):
                     stacksize += 4
-                    entry.memloc = -stacksize-local_var_offset
+                    entry.memloc = '{}($fp)'.format(-stacksize-local_var_offset)
             # recursively visit nested stmtBlocks
             for stmt in stmtblock.stmts:
                 if isinstance(stmt, StmtBlock):
@@ -244,7 +247,7 @@ class Generator:
         # All parameters are in stack
         for i, varDecl in enumerate(function_decl.formals):
             entry = function_decl.symbol_table.lookup(varDecl.ident)
-            entry.memloc = (i+1)*4
+            entry.memloc = '{}($fp)'.format((i+1)*4)
         visit_symbol_table(function_decl.stmtblock)
         return stacksize + stack_top_pad
         
@@ -274,12 +277,14 @@ class Generator:
         self.visit_expr(ifstmt.test)
         r1 = ifstmt.test.reg
         elselabel = Label.next()
-        self.emit('blez {0}, {1}'.format(r1, elselabel))
+        # self.emit('blez {0}, {1}'.format(r1, elselabel))
+        self.machine.emit_jump_if_false(r1, elselabel)
         self.machine.free_registers(r1)
         self.visit_stmt(ifstmt.stmt)
         if ifstmt.elsestmt != None:
             endlabel = Label.next()
-            self.emit('b {0}'.format(endlabel))
+            #self.emit('b {0}'.format(endlabel))
+            self.machine.emit_jump(endlabel)
         self.emit_label(elselabel)
         if ifstmt.elsestmt != None:
             self.visit_stmt(ifstmt.elsestmt)
@@ -294,10 +299,12 @@ class Generator:
         r1 = whilestmt.test.reg
         endlabel = Label.next()
         self.loop_endlabel = endlabel # for break stmts
-        self.emit('blez {0}, {1}'.format(r1, endlabel))
+        # self.emit('blez {0}, {1}'.format(r1, endlabel))
+        self.machine.emit_jump_if_false(r1, endlabel)
         self.machine.free_registers(r1)
         self.visit_stmt(whilestmt.stmt)
-        self.emit('b {0}'.format(looplabel))
+        # self.emit('b {0}'.format(looplabel))
+        self.machine.emit_jump(looplabel)
         self.emit_label(endlabel)
         self.machine.free_registers(r1)
     
@@ -309,7 +316,8 @@ class Generator:
         r1 = forstmt.test.reg
         endlabel = Label.next()
         self.loop_endlabel = endlabel # for break stmts
-        self.emit('blez {0}, {1}'.format(r1, endlabel))
+        #self.emit('blez {0}, {1}'.format(r1, endlabel))
+        self.machine.emit_jump_if_false(r1, endlabel)
         self.visit_stmt(forstmt.stmt)
         self.visit_expr(forstmt.step)
         self.emit('b {0}'.format(looplabel))
@@ -325,17 +333,19 @@ class Generator:
             r0 = returnstmt.expr.reg
             self.emit('move $v0, {0}'.format(r0), 'assign return value into $v0')
             self.machine.free_registers(r0)
-        self.emit('move $sp, $fp', 'pop callee frame off stack')
-        self.emit('lw $ra, -4($fp)', 'restore saved ra')
-        self.emit('lw $fp, 0($fp)', 'restore saved fp')
-        self.emit('jr $ra', 'return from function')
+        # self.emit('move $sp, $fp', 'pop callee frame off stack')
+        # self.emit('lw $ra, -4($fp)', 'restore saved ra')
+        # self.emit('lw $fp, 0($fp)', 'restore saved fp')
+        # self.emit('jr $ra', 'return from function')
+        self.machine.stack_teardown()
     
     def visit_printstmt(self, printstmt):
         for expr in printstmt.exprs:
             self.visit_expr(expr)
             r0 = expr.reg
             self.emit(comment = 'PushParam')
-            self.emit('subu $sp, $sp, 4', 'decrement sp to make space for param')
+            #self.emit('subu $sp, $sp, 4', 'decrement sp to make space for param')
+            self.machine.stack_grow(4, 'decrement sp to make space for param')
             self.emit('sw {0}, 4($sp)'.format(r0),	'copy param value to stack')
             #print('expr memloc:', self.symbol_table.lookup(expr.ident).memloc)
             if expr.type_ == 'int':
@@ -349,7 +359,8 @@ class Generator:
                 self.emit('jal _PrintBool', 'jump to function')
             self.machine.free_registers(r0)
             self.emit(comment = 'PopParams')
-            self.emit('add $sp, $sp, 4', 'pop params off stack')
+            #self.emit('add $sp, $sp, 4', 'pop params off stack')
+            self.machine.stack_shrink(4, 'pop params off stack')
         
     def visit_expr(self, expr):
         if expr == None:
@@ -359,8 +370,8 @@ class Generator:
             ident = expr.L.ident
             r1 = expr.R.reg
             memloc = self.symbol_table.lookup(ident).memloc
-            self.emit('sw {0}, {1}($fp)'.format(r1, memloc),
-                      'spill {0} from {1} to {2}($fp)'.format(ident, r1, memloc))
+            self.emit('sw {0}, {1}'.format(r1, memloc),
+                      'spill {0} from {1} to {2}'.format(ident, r1, memloc))
             # TODO: postpone freeing this register because assign and evaluate is allowed
             expr.reg = r1
             self.machine.free_registers(r1)
@@ -371,9 +382,25 @@ class Generator:
             r2 = expr.R.reg
             r0 = self.machine.get_free_register()
             op = expr.op.lexeme
-            self.emit('{0} {1}, {2}, {3}'\
-                      .format(self.machine.get_bin_op_instr(op),
-                              r0, r1, r2))
+            if expr.L.type_ == 'string' and op in ['!=', '==']:
+                # special case: use the _StringEqual library function privided
+                self.emit(comment = 'PushParam')
+                self.machine.stack_grow(8, 'decrement sp to make space for param')
+                self.emit('sw {0}, 4($sp)'.format(r1))
+                self.emit('sw {0}, 8($sp)'.format(r2))
+                # Caution: r1 and r2 are possibly overwritten immediately after call
+                # choosing not to save them here because no need
+                self.emit(comment = 'LCall _StringEqual')
+                self.emit('jal _StringEqual', 'jump to function')
+                
+                self.machine.stack_shrink(8, 'pop params off stack')
+                r0 = self.machine.get_free_register()
+                self.emit('move {0}, $v0'.format(r0),
+                          'copy function return value from $v0')
+            else:
+                self.emit('{0} {1}, {2}, {3}'\
+                          .format(self.machine.get_bin_op_instr(op),
+                                  r0, r1, r2))
             self.machine.free_registers(r1, r2)
             expr.reg = r0
         elif isinstance(expr, UnaryExpr):
@@ -390,13 +417,13 @@ class Generator:
             self.machine.free_registers(r1)
             expr.reg = r0
         elif isinstance(expr, CallExpr):
-            self.visit_callExpr2(expr)
+            self.visit_callExpr(expr)
         elif isinstance(expr, IdentExpr):
             ident = expr.ident
             r0 = self.machine.get_free_register()
             memloc = self.symbol_table.lookup(ident).memloc
-            self.emit('lw {0}, {1}($fp)'.format(r0, memloc),
-                      'fill {0} to {1} from {2}($fp)'.format(ident, r0, memloc))
+            self.emit('lw {0}, {1}'.format(r0, memloc),
+                      'fill {0} to {1} from {2}'.format(ident, r0, memloc))
             expr.reg = r0
             pass
         elif isinstance(expr, ConstantExpr):
@@ -425,15 +452,28 @@ class Generator:
         elif isinstance(expr, Null):
             # TODO: implement
             pass
+        elif isinstance(expr, ReadIntegerExpr):
+            self.emit('jal _ReadInteger')
+            r0 = self.machine.get_free_register()
+            self.emit('move {0}, $v0'.format(r0))
+            expr.reg = r0
+        elif isinstance(expr, ReadLineExpr):
+            self.emit('jal _ReadLine')
+            r0 = self.machine.get_free_register()
+            self.emit('move {0}, $v0'.format(r0))
+            expr.reg = r0
         
-    def visit_callExpr2(self, expr):
+    def visit_callExpr(self, expr):
         self.emit(comment = 'start preparation for function call')
         # SAVE CALLER-SAVED REGISTERS
         used = self.machine.get_used_registers()
         if len(used) > 0:
+            size = 4*(len(used) + 1)
             self.emit(comment = "push caller-saved registers")
-            self.emit('subu $sp, $sp, {0}'.format(4*(len(used) + 1)),
-                      'decrement sp to make space for registers')
+            # self.emit('subu $sp, $sp, {0}'.format(4*(len(used) + 1)),
+            #           'decrement sp to make space for registers')
+            self.machine.stack_grow(size,
+                                    'decrement sp to make space for registers')
             #print('Used registers:', used)
             for i, reg in enumerate(used):
                 self.emit('sw {0}, {1}($sp)'.format(reg, (i+1)*4))
@@ -446,8 +486,10 @@ class Generator:
         # first grow stack for pushing params (differs from the sample code)
         # then evaluate each actual and push to stack
         param_memory_size = len(expr.actuals)*4
-        self.emit('subu $sp, $sp, {0}'.format(param_memory_size),
-                  '# decrement sp to make space for param')
+        # self.emit('subu $sp, $sp, {0}'.format(param_memory_size),
+        #           '# decrement sp to make space for param')
+        self.machine.stack_grow(param_memory_size,
+                                'decrement sp to make space for registers')
         for i, actual in enumerate(expr.actuals):
             self.visit_expr(actual)
             r0 = actual.reg
@@ -490,46 +532,6 @@ class Generator:
                   'copy function return value from $v0')
         expr.reg = r0
 
-        
-    def visit_callExpr(self, expr):
-        
-        # EVALUATE AND PUSH PARAMS
-        # actuals must be evaluated from left to right, but pushed right to left
-        # implementation:
-        # first grow stack for pushing params (differs from the sample code)
-        # then evaluate each actual and push to stack
-        param_memory_size = len(expr.actuals)*4
-        self.emit('subu $sp, $sp, {0}'.format(param_memory_size),
-                  '# decrement sp to make space for param')
-        for i, actual in enumerate(expr.actuals):
-            self.visit_expr(actual)
-            r0 = actual.reg
-            # TODO: investigate
-            # The sample code for param pushing looks like this:
-            # subu $sp, $sp, 4	# decrement sp to make space for param
-            # $t0, 4($sp) # copy param value to stack
-            # But shouldn't this be 0($sp) instead?
-            # One explanation could be that in the samples, initial stack allocation always 
-            # allocates extra memory, and param locations start at ebp+4 instead of ebp+8
-            
-            
-            self.emit('sw {0}, {1}($sp)'.format(r0, 4*(i+1)),
-                      'copy param value to stack')
-            self.machine.free_registers(r0)
-            
-        # STEP 2: make function call
-        funclabel = Label.next(expr.ident)
-        self.emit(comment = 'LCall {0}'.format(funclabel))
-        self.emit('jal {0}'.format(funclabel))
-        # STEP 3: copy return value
-        r0 = self.machine.get_free_register()
-        self.emit('move {0}, $v0'.format(r0),
-                  'copy function return value from $v0')
-        expr.reg = r0
-        # STEP 4: pop params
-        self.emit(comment = 'PopParams')
-        self.emit('add $sp, $sp, {0}'.format(param_memory_size),
-                  'pop params off stack')
     
     def write(self):
         try:
