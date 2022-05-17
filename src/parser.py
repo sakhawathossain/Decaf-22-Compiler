@@ -16,7 +16,7 @@ class Span():
         self.line_end = line_end
         self.col_start = col_start
         self.col_end = col_end
-        
+    
     def unify(L, R):
         if not isinstance(L, Span):
             L = L.span

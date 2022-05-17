@@ -7,6 +7,7 @@ Created on Fri Apr 22 18:15:55 2022
 """
 
 import sys
+from os.path import basename
 
 from analyzer import SyntaxAnalyzer
 from analyzer import SymbolTable
@@ -34,7 +35,7 @@ from parser import Null
 
 class Register:
     def __init__(self):
-        self.var = None
+        self.var = None # unused
         self.isblank = True
         
 class MIPSArch:
@@ -68,6 +69,8 @@ class MIPSArch:
                 self.registers[reg].isblank = False
                 return reg
         # TODO: throw error if no register is free
+        # There should not be a lack of free registers if they are released properly
+        # At most 3 registers needed for a 3-address instruction
         print('Error! no free registers!')
         return None
     
@@ -92,7 +95,6 @@ class MIPSArch:
     def free_registers(self, *reg):
         """
         Mark each register in list as unused.
-
         """
         for r in reg:
             if r in self.registers:
@@ -112,36 +114,53 @@ class MIPSArch:
         return self.op_unary[op]
     
     def stack_setup(self):
+        """
+        Emit assembly code for setting up stack at the beginning of function
+        """
         self.emit('subu $sp, $sp, 8', 'decrement sp to make space to save ra, fp')
         self.emit('sw $fp, 8($sp)', 'save fp')
         self.emit('sw $ra, 4($sp)', 'save ra')
         self.emit('addiu $fp, $sp, 8', 'set up new fp')
         
     def stack_teardown(self):
+        """
+        Emit assembly code for tearing down stack frame after function call
+        """
         self.emit('move $sp, $fp', 'pop callee frame off stack')
         self.emit('lw $ra, -4($fp)', 'restore saved ra')
         self.emit('lw $fp, 0($fp)', 'restore saved fp')
         self.emit('jr $ra', 'return from function')
         
     def stack_grow(self, size, comment):
+        """
+        Emit assembly code for growing stack
+        """
         self.emit('subu $sp, $sp, {0}'.format(size),
                  comment)
     
     def stack_shrink(self, size, comment):
+        """
+        Emit assembly code for shrinking stack
+        """
         self.emit('add $sp, $sp, {0}'.format(size),
                   'increase sp to remove space registers')
         
     def emit_jump_if_false(self, reg, label):
+        """
+        Emit assembly code for jumping to label if register <= 0
+        """
         self.emit('blez {0}, {1}'.format(reg, label))
         
     def emit_jump(self, label):
+        """
+        Emit assembly code for unconditional jump to label
+        """
         self.emit('b {0}'.format(label))
             
 class Label:
     """
     Generate and keep track of labels.
     """
-    
     generic_labelcount = -1
     string_labelcount = 0
         
@@ -186,6 +205,7 @@ class Generator:
         if self.ast == None:
             return
         self.symbol_table = self.ast.symbol_table
+        self.emit(comment = "Code Generator submission: Sakhawat Hossain Saimon")
         # preamble
         self.emit(comment = 'standard Decaf preamble')
         self.emit('.text')
@@ -193,7 +213,7 @@ class Generator:
         self.emit('.globl main')
         # generate program code
         self.visit_program()
-        self.write()
+        return self.write()
         
     def visit_program(self):
         nglobals = 0
@@ -383,7 +403,8 @@ class Generator:
             r0 = self.machine.get_free_register()
             op = expr.op.lexeme
             if expr.L.type_ == 'string' and op in ['!=', '==']:
-                # special case: use the _StringEqual library function privided
+                # special case: string comparison
+                # TODO: if one of the operands is null (0), then do not invoke _StringEqual
                 self.emit(comment = 'PushParam')
                 self.machine.stack_grow(8, 'decrement sp to make space for param')
                 self.emit('sw {0}, 4($sp)'.format(r1))
@@ -412,8 +433,6 @@ class Generator:
                 self.emit('nor {0}, {1}, {1}'.format(r0, r1))
             else:
                 self.emit('neg {0}, {1}'.format(r0, r1))
-            # self.emit('{0} {1}, {2}'.format(self.machine.get_unr_op_instr(op),
-            #                                 r0, r1))
             self.machine.free_registers(r1)
             expr.reg = r0
         elif isinstance(expr, CallExpr):
@@ -448,10 +467,19 @@ class Generator:
                     self.emit('li {0}, 0'.format(r0),
                               'load constant value 0 (false) into {0}'.format(r0))
                 expr.reg = r0
+            elif expr.const_type == 'double':
+                # doubles not supported at code generator level!
+                # panic and flail
+                # treat double as 0
+                r0 = self.machine.get_free_register()
+                self.emit('li {0}, 0'.format(r0),
+                          'floating op not supported! floats treated as 0.')
                 
         elif isinstance(expr, Null):
-            # TODO: implement
-            pass
+            # Treat null as zero
+            r0 = self.machine.get_free_register()
+            self.emit('xor {0}, {0}, {0}'.format(r0))
+            expr.reg = r0
         elif isinstance(expr, ReadIntegerExpr):
             self.emit('jal _ReadInteger')
             r0 = self.machine.get_free_register()
@@ -465,20 +493,18 @@ class Generator:
         
     def visit_callExpr(self, expr):
         self.emit(comment = 'start preparation for function call')
+        
         # SAVE CALLER-SAVED REGISTERS
         used = self.machine.get_used_registers()
         if len(used) > 0:
             size = 4*(len(used) + 1)
             self.emit(comment = "push caller-saved registers")
-            # self.emit('subu $sp, $sp, {0}'.format(4*(len(used) + 1)),
-            #           'decrement sp to make space for registers')
             self.machine.stack_grow(size,
                                     'decrement sp to make space for registers')
             #print('Used registers:', used)
             for i, reg in enumerate(used):
                 self.emit('sw {0}, {1}($sp)'.format(reg, (i+1)*4))
                 self.machine.free_registers(reg)
-                #print('storing {} in {}($sp)'.format(reg, (i+1)*4))
             
         # EVALUATE AND PUSH PARAMS
         # actuals must be evaluated from left to right, but pushed right to left
@@ -486,32 +512,22 @@ class Generator:
         # first grow stack for pushing params (differs from the sample code)
         # then evaluate each actual and push to stack
         param_memory_size = len(expr.actuals)*4
-        # self.emit('subu $sp, $sp, {0}'.format(param_memory_size),
-        #           '# decrement sp to make space for param')
         self.machine.stack_grow(param_memory_size,
                                 'decrement sp to make space for registers')
         for i, actual in enumerate(expr.actuals):
             self.visit_expr(actual)
             r0 = actual.reg
-            # TODO: investigate
-            # The sample code for param pushing looks like this:
-            # subu $sp, $sp, 4	# decrement sp to make space for param
-            # $t0, 4($sp) # copy param value to stack
-            # But shouldn't this be 0($sp) instead?
-            # One explanation could be that in the samples, initial stack allocation always 
-            # allocates extra memory, and param locations start at ebp+4 instead of ebp+8
-            
             
             self.emit('sw {0}, {1}($sp)'.format(r0, 4*(i+1)),
                       'copy param value to stack')
             self.machine.free_registers(r0)
             
-        # STEP 2: make function call
+        # MAKE FUNCTION CALL
         funclabel = Label.next(expr.ident)
         self.emit(comment = 'LCall {0}'.format(funclabel))
         self.emit('jal {0}'.format(funclabel))
         
-        # STEP 4: pop params
+        # POP PARAMS
         self.emit(comment = 'PopParams')
         self.emit('add $sp, $sp, {0}'.format(param_memory_size),
                   'pop params off stack')
@@ -521,12 +537,11 @@ class Generator:
             self.emit(comment = "pop caller-saved registers")
             for i, reg in enumerate(used):
                 self.emit('lw {0}, {1}($sp)'.format(reg, (i+1)*4))
-                #print('loading {} from {}($sp)'.format(reg, (i+1)*4))
             self.emit('add $sp, $sp, {0}'.format(4*(len(used)+1)),
                       'increase sp to remove space registers')
             self.machine.set_used_registers(used)
             
-        # STEP 3: copy return value
+        # COPY RETURN VALUE
         r0 = self.machine.get_free_register()
         self.emit('move {0}, $v0'.format(r0),
                   'copy function return value from $v0')
@@ -534,12 +549,7 @@ class Generator:
 
     
     def write(self):
-        try:
-            with open('samples/testout.s', 'w') as file:
-                file.write('\n'.join(self.instructions))
-                file.write('\n')
-        except IOError as ie:
-            print(ie)
+        return '\n'.join(self.instructions) + '\n'
         
         
     
@@ -550,8 +560,18 @@ if __name__ == "__main__":
     else:
         path = sys.argv[1]
         try:
+            filename_ext = basename(path)
+            extension = filename_ext.split('.')[-1]
+            filename = filename_ext[:-len(extension)-1]
             with open(path) as file:
                 text = file.read()
-                Generator(text).generate()
+                asm = Generator(text).generate()
+                if asm != None:
+                    try:
+                        outpath = path[:-len(extension)-1] + '.s'
+                        with open(outpath, 'w') as out:
+                            out.write(asm)
+                    except IOError:
+                         print('Could not write assembly code to file: {0}'.format(outpath))
         except IOError:
             print('Could not read file: {0}'.format(path))

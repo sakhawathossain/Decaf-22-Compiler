@@ -12,7 +12,6 @@ import sys
 from parser import Span
 from parser import Token
 from parser import ParseError
-
 from parser import ASTNode
 from parser import Program
 from parser import VariableDecl
@@ -33,6 +32,7 @@ from parser import CallExpr
 from parser import BinaryExpr
 from parser import UnaryExpr
 from parser import IdentExpr
+from parser import Null
 from parser import ConstantExpr
 from parser import ReadIntegerExpr
 from parser import ReadLineExpr
@@ -75,12 +75,7 @@ class SymbolTable():
             # move up one level
             symbol_table = symbol_table.parent
         return None
-    
-    def print_self(self):
-        print('SymbolTable >>')
-        print('\n'.join([entry + ': ' + self.entries[entry].type_ for entry in self.entries]))
-        print()
-    
+
 class SymbolTableConstructor():
     
     def __init__(self, program):
@@ -242,6 +237,8 @@ class SemanticChecker():
             expr.type_ = 'int'
         elif isinstance(expr, ReadLineExpr):
             expr.type_ = 'string'
+        elif isinstance(expr, Null):
+            expr.type_ = 'null'
         elif isinstance(expr, CallExpr):
             ident = expr.ident
             entry = self.symbol_table.lookup(ident)
@@ -283,7 +280,7 @@ class SemanticChecker():
         compatible = True
         resulting_type = 'Error'
         if L.type_ == 'Error' or R.type_ == 'Error':
-            pass
+            return compatible, resulting_type
         elif op in ['+', '-', '*', '/', '%']:
             compatible = L.type_ in ['int', 'double'] and R.type_ == L.type_
             resulting_type = L.type_ if compatible else 'Error'
@@ -291,13 +288,15 @@ class SemanticChecker():
             compatible = L.type_ in ['int', 'double', 'Error'] and R.type_ == L.type_
             resulting_type = 'bool' if compatible else 'Error'
         elif op in ['!=', '==']:
-            compatible = L.type_ == R.type_
+            compatible = (L.type_ == R.type_) or \
+                         (L.type_ == 'string' and R.type_ == 'null') or\
+                         (L.type == 'null' and R.type_ == 'string')
             resulting_type = 'bool'
         elif op in ['&&', '||']:
             compatible = L.type_ == 'bool' and R.type_ == L.type_
             resulting_type = 'bool'
         elif op == '=':
-            compatible = L.type_ == R.type_
+            compatible = (L.type_ == R.type_) or (L.type_ == 'string' and R.type_ == 'null')
             resulting_type = L.type_
         return compatible, resulting_type
     
