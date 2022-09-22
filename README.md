@@ -13,7 +13,7 @@ FunctionDecl ::= Type ident ( Formals ) StmtBlock |
                  void ident ( Formals ) StmtBlock
 Formals      ::= Variable+, | epsilon
 StmtBlock    ::= { VariableDecl* Stmt* }
-Stmt         ::= \<Expr\>; | IfStmt | WhileStmt | ForStmt | BreakStmt |
+Stmt         ::= `<Expr>`; | IfStmt | WhileStmt | ForStmt | BreakStmt |
                  ReturnStmt | PrintStmt | StmtBlock
 IfStmt       ::= if ( Expr ) Stmt \<else Stmt\>
 WhileStmt    ::= while ( Expr ) Stmt
