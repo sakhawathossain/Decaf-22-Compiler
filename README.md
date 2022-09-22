@@ -15,17 +15,17 @@ Formals      ::= Variable+, | epsilon
 StmtBlock    ::= { VariableDecl* Stmt* }
 Stmt         ::= <Expr>; | IfStmt | WhileStmt | ForStmt | BreakStmt |
                  ReturnStmt | PrintStmt | StmtBlock
-IfStmt       ::= if ( Expr ) Stmt \<else Stmt\>
+IfStmt       ::= if ( Expr ) Stmt <else Stmt>
 WhileStmt    ::= while ( Expr ) Stmt
-ForStmt      ::= for ( \<Expr\>; Expr ; \<Expr\>) Stmt
-ReturnStmt   ::= return \<Expr\> ;
+ForStmt      ::= for ( <Expr>; Expr ; <Expr>) Stmt
+ReturnStmt   ::= return <Expr> ;
 BreakStmt    ::= break ;
 PrintStmt    ::= Print ( Expr+, ) ;
 Expr         ::= LValue = Expr | Constant | LValue | Call | ( Expr ) |
                  Expr + Expr | Expr - Expr | Expr * Expr | Expr = Expr |
-                 Expr % Expr | - Expr | Expr < Expr | Expr \<= Expr |
+                 Expr % Expr | - Expr | Expr < Expr | Expr <= Expr |
                  Expr > Expr | Expr >= Expr | Expr == Expr | Expr ! = Expr |
-                 Expr && Expr | Expr j| Expr | ! Expr | ReadInteger ( ) |
+                 Expr && Expr | Expr || Expr | ! Expr | ReadInteger ( ) |
                  ReadLine ( )
 LValue       ::= ident
 Call         ::= ident ( Actuals )
