@@ -1,5 +1,21 @@
 # Decaf-22 Compiler
-#### Python implementation of a compiler for the Decaf-22 (Decaf 19) programming language.
+### Python implementation of a compiler for the Decaf-22 (Decaf 19) programming language.
+
+#### Usage:
+Compiling machine code from decaf source file: \
+```python3 ./generator.py <input-file>```
+
+Producing output for intermediate steps: \
+```python3 <module-name> <input-file>```
+
+#### Executing the produced machine code:
+The machine code can be executed on a MIPS simulator such as SPIM.
+
+#### Modules:
+- `scanner.py`: tokenize input stream.
+- `parser.py:` abstract syntax tree generation.
+- `analyzer.py:`syntactical analysis including symbol table generation and type checking.
+- `generator.py`: machine code generation
 
 #### Decaf 19 grammar:
 
